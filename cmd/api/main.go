@@ -12,7 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/MykolaShev/fleet-management-saas/internal/config"
+	"github.com/MykolaShev/fleet-management-saas/internal/handler"
 	"github.com/MykolaShev/fleet-management-saas/internal/platform/postgres"
+	"github.com/MykolaShev/fleet-management-saas/internal/repository"
+	"github.com/MykolaShev/fleet-management-saas/internal/service"
 )
 
 func main() {
@@ -35,10 +38,17 @@ func main() {
 	}
 	log.Println("database schema is up to date")
 
+	vehicleRepo := repository.NewVehicleRepository(db)
+	vehicleService := service.NewVehicleService(vehicleRepo)
+	vehicleHandler := handler.NewVehicleHandler(vehicleService)
+
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	api := router.Group("/api/v1")
+	vehicleHandler.RegisterRoutes(api)
 
 	log.Printf("starting server on :%s", cfg.AppPort)
 	if err := router.Run(":" + cfg.AppPort); err != nil {
