@@ -1,10 +1,6 @@
 package domain
 
-import (
-	"time"
-
-	"github.com/google/uuid"
-)
+import "github.com/google/uuid"
 
 // DeliveryStatus tracks a delivery through its lifecycle.
 type DeliveryStatus string
@@ -20,6 +16,11 @@ const (
 // Delivery represents a single delivery order within a tenant. VehicleID
 // and DriverID are nullable because a delivery can exist (pending) before
 // it's assigned to a vehicle/driver.
+//
+// Kept intentionally minimal for the CRUD stage: geocoordinates, ETA and
+// photo-proof fields are added later, exactly when the stage that needs
+// them (AI agent / Lambda+CDN) is implemented, rather than sitting unused
+// from day one.
 type Delivery struct {
 	BaseModel
 	TenantID  uuid.UUID  `gorm:"type:uuid;not null;index" json:"tenant_id"`
@@ -28,20 +29,8 @@ type Delivery struct {
 
 	Status DeliveryStatus `gorm:"type:varchar(20);not null;default:pending" json:"status"`
 
-	PickupAddress  string  `gorm:"not null" json:"pickup_address"`
-	PickupLat      float64 `json:"pickup_lat"`
-	PickupLng      float64 `json:"pickup_lng"`
-	DropoffAddress string  `gorm:"not null" json:"dropoff_address"`
-	DropoffLat     float64 `json:"dropoff_lat"`
-	DropoffLng     float64 `json:"dropoff_lng"`
-
-	// ETA - estimated time of arrival
-	ETA         *time.Time `json:"eta"`
-	DeliveredAt *time.Time `json:"delivered_at"`
-
-	// PhotoURL is set once the delivery-proof photo has been uploaded and
-	// processed (Lambda + Blob/CDN stages).
-	PhotoURL *string `json:"photo_url"`
+	PickupAddress  string `gorm:"not null" json:"pickup_address"`
+	DropoffAddress string `gorm:"not null" json:"dropoff_address"`
 
 	Tenant  Tenant   `gorm:"foreignKey:TenantID" json:"-"`
 	Vehicle *Vehicle `gorm:"foreignKey:VehicleID" json:"-"`
