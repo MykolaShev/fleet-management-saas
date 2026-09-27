@@ -10,12 +10,12 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 | Item | Description                          | Status |
 |------|---------------------------------------|--------|
 | Pet project | Standalone API, documented & polished | ⬜ |
-| REST API CRUD | Core CRUD endpoints                  | ⬜ |
-| Pagination | List endpoints support pagination       | ⬜ |
-| Docker | Containerized app + local dev stack         | ⬜ |
+| REST API CRUD | Core CRUD endpoints                  | ✅ |
+| Pagination | List endpoints support pagination       | ✅ |
+| Docker | Containerized app + local dev stack         | ✅ |
 | CI/CD | GitHub Actions pipeline (lint/test/build)    | ⬜ |
-| Cloud deploy | Deployed to a free-tier cloud provider  | ⬜ |
-| API tests | Automated API test suite (Postman/Newman) | ⬜ |
+| Cloud deploy | Deployed to a free-tier cloud provider  | ⬜ (provider decision deferred to Week 3 — pending own research) |
+| API tests | Automated API test suite (Postman/Newman) | 🟨 (collection written, needs a real run against a live stack to confirm) |
 | Caching | Redis-backed caching layer                  | ⬜ |
 
 ## Auth / Multi-tenancy

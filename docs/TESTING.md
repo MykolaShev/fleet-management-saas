@@ -66,7 +66,12 @@ containerized.
 
 | Stage | Category | Evidence type | Location |
 |-------|----------|----------------|----------|
-| _(filled in as stages are completed)_ | | | |
+| C5 (Vehicle) / B1 | code-centric | unit tests (service, fake repo) + integration tests (repository, in-memory SQLite) | `internal/service/vehicle_service_test.go`, `internal/repository/vehicle_repository_test.go` |
+| C5 (User) | code-centric | unit tests (service, fake repo) + integration tests (repository, in-memory SQLite, incl. tenant-scoped email uniqueness) | `internal/service/user_service_test.go`, `internal/repository/user_repository_test.go` |
+| C5 (Delivery) / B1 | code-centric | unit tests (service, fake repo + fake vehicle/user lookups, incl. cross-tenant assignment rejection) + integration tests (repository, in-memory SQLite, incl. assign/unassign NULL persistence) | `internal/service/delivery_service_test.go`, `internal/repository/delivery_repository_test.go` |
+| C4 | infrastructure | smoke-test script: `docker compose up --build`, poll `/health`, exercise real Vehicle CRUD against the containerized stack, then tear down | `scripts/smoke-test.sh` (run via `make smoke-test`) |
+| QA1 | code-centric (black-box) | Postman/Newman collection: full CRUD + pagination on all 3 entities, plus business-rule checks (tenant-scoped email uniqueness, cross-tenant vehicle/driver assignment rejection) | `test/postman/fleet-management.postman_collection.json` (run via `make postman-test`) |
+| _(filled in as further stages are completed)_ | | | |
 
 This table is the source of truth for "this stage is done and provably so" —
 update it as part of finishing each stage, not as a separate cleanup pass.
