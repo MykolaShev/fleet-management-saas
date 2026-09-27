@@ -42,6 +42,14 @@ func main() {
 	vehicleService := service.NewVehicleService(vehicleRepo)
 	vehicleHandler := handler.NewVehicleHandler(vehicleService)
 
+	userRepo := repository.NewUserRepository(db)
+	userService := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userService)
+
+	deliveryRepo := repository.NewDeliveryRepository(db)
+	deliveryService := service.NewDeliveryService(deliveryRepo, vehicleRepo, userRepo)
+	deliveryHandler := handler.NewDeliveryHandler(deliveryService)
+
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -49,6 +57,8 @@ func main() {
 
 	api := router.Group("/api/v1")
 	vehicleHandler.RegisterRoutes(api)
+	userHandler.RegisterRoutes(api)
+	deliveryHandler.RegisterRoutes(api)
 
 	log.Printf("starting server on :%s", cfg.AppPort)
 	if err := router.Run(":" + cfg.AppPort); err != nil {
