@@ -44,7 +44,10 @@ func TestVehicleRepository_CreateAndGet(t *testing.T) {
 	got, err := repo.GetByID(ctx, tenantID, v.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "AA1234BC", got.PlateNumber)
-	assert.Equal(t, domain.VehicleStatus(""), got.Status) // status set by service, not repo
+	// The gorm `default:idle` tag on Status means the DB applies this
+	// default whenever the Go zero value ("") is inserted — even calling
+	// the repository directly (bypassing the service) still gets "idle".
+	assert.Equal(t, domain.VehicleIdle, got.Status)
 }
 
 func TestVehicleRepository_GetByID_NotFound(t *testing.T) {
