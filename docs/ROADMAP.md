@@ -15,7 +15,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 | Docker | Containerized app + local dev stack         | ✅ |
 | CI/CD | GitHub Actions pipeline (lint/test/build)    | ⬜ |
 | Cloud deploy | Deployed to a free-tier cloud provider  | ⬜ (provider decision deferred to Week 3 — pending own research) |
-| API tests | Automated API test suite (Postman/Newman) | 🟨 (collection written, needs a real run against a live stack to confirm) |
+| API tests | Automated API test suite (Postman/Newman) | ✅ |
 | Caching | Redis-backed caching layer                  | ⬜ |
 
 ## Auth / Multi-tenancy
