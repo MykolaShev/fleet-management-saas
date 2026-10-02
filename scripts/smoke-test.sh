@@ -20,12 +20,12 @@ BASE_URL="http://localhost:8080"
 
 cleanup() {
   echo "==> Tearing down..."
-  docker compose -f "$COMPOSE_FILE" down -v
+  docker compose -f "$COMPOSE_FILE" --profile full down -v
 }
 trap cleanup EXIT
 
-echo "==> Building and starting the stack..."
-docker compose -f "$COMPOSE_FILE" up -d --build
+echo "==> Building and starting the full stack (postgres + redis + api)..."
+docker compose -f "$COMPOSE_FILE" --profile full up -d --build
 
 echo "==> Waiting for /health..."
 attempts=30

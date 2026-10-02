@@ -7,6 +7,22 @@ add a row to the table below with a link to the actual test/proof.
 
 ## Categories
 
+### 0. Lesson learned: SQLite ≠ Postgres on foreign keys
+
+Our repository tests run against in-memory SQLite (fast, no Docker needed in
+CI) instead of real Postgres. This caught us once already: **SQLite does not
+enforce foreign keys by default**, while Postgres always does. A test that
+inserted a Vehicle/User/Delivery referencing a Tenant that was never created
+passed happily on SQLite and then failed in production with a foreign key
+violation the first time it hit real Postgres.
+
+Fix: `PRAGMA foreign_keys = ON` is now set explicitly in `setupTestDB`
+(`internal/repository/vehicle_repository_test.go`), and every test that
+inserts a row now creates its referenced Tenant/Vehicle/User first via
+`createTestTenant` or a real repository call. Keep this in mind for any new
+FK relationship added later: SQLite will silently let it through unless this
+pragma is set.
+
 ### 1. Code-centric logic
 CRUD, pagination, tenant isolation, feature flags, caching, auth logic, search.
 

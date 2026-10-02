@@ -38,6 +38,8 @@ func main() {
 	}
 	log.Println("database schema is up to date")
 
+	tenantRepo := repository.NewTenantRepository(db)
+
 	vehicleRepo := repository.NewVehicleRepository(db)
 	vehicleService := service.NewVehicleService(vehicleRepo)
 	vehicleHandler := handler.NewVehicleHandler(vehicleService)
@@ -55,7 +57,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	api := router.Group("/api/v1")
+	api := router.Group("/api/v1", handler.EnsureTenant(tenantRepo))
 	vehicleHandler.RegisterRoutes(api)
 	userHandler.RegisterRoutes(api)
 	deliveryHandler.RegisterRoutes(api)
