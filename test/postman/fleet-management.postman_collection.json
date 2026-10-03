@@ -417,7 +417,110 @@
         ]
       },
       {
-        "name": "4. Deliveries",
+        "name": "4. Feature Flags",
+        "item": [
+          {
+            "name": "List flags - full catalog with defaults",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "X-Tenant-ID", "value": "{{tenant_id}}" }],
+              "url": { "raw": "{{base_url}}/api/v1/feature-flags", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('full known catalog is returned, all disabled by default', () => {",
+                    "    pm.expect(json.flags.length).to.be.at.least(3);",
+                    "    json.flags.forEach(f => pm.expect(f.enabled).to.eql(false));",
+                    "});"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Enable ai_agent flag (PATCH)",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"enabled\":true}" },
+              "url": {
+                "raw": "{{base_url}}/api/v1/feature-flags/ai_agent",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "feature-flags", "ai_agent"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('flag is now enabled', () => pm.expect(json.enabled).to.eql(true));"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "List flags again - ai_agent now true, others still false",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "X-Tenant-ID", "value": "{{tenant_id}}" }],
+              "url": { "raw": "{{base_url}}/api/v1/feature-flags", "host": ["{{base_url}}"], "path": ["api", "v1", "feature-flags"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "const aiAgent = json.flags.find(f => f.key === 'ai_agent');",
+                    "const liveTracking = json.flags.find(f => f.key === 'live_tracking');",
+                    "pm.test('ai_agent is enabled', () => pm.expect(aiAgent.enabled).to.eql(true));",
+                    "pm.test('live_tracking still defaults to disabled', () => pm.expect(liveTracking.enabled).to.eql(false));"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Set unknown flag key -> 422",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"enabled\":true}" },
+              "url": {
+                "raw": "{{base_url}}/api/v1/feature-flags/not_a_real_flag",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "feature-flags", "not_a_real_flag"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('status is 422', () => pm.response.to.have.status(422));"] }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "5. Deliveries",
         "item": [
           {
             "name": "Create vehicle for delivery assignment",

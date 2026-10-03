@@ -52,6 +52,10 @@ func main() {
 	deliveryService := service.NewDeliveryService(deliveryRepo, vehicleRepo, userRepo)
 	deliveryHandler := handler.NewDeliveryHandler(deliveryService)
 
+	featureFlagRepo := repository.NewFeatureFlagRepository(db)
+	featureFlagService := service.NewFeatureFlagService(featureFlagRepo)
+	featureFlagHandler := handler.NewFeatureFlagHandler(featureFlagService)
+
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -61,6 +65,7 @@ func main() {
 	vehicleHandler.RegisterRoutes(api)
 	userHandler.RegisterRoutes(api)
 	deliveryHandler.RegisterRoutes(api)
+	featureFlagHandler.RegisterRoutes(api)
 
 	log.Printf("starting server on :%s", cfg.AppPort)
 	if err := router.Run(":" + cfg.AppPort); err != nil {

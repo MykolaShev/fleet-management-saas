@@ -48,5 +48,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.User{},
 		&domain.Vehicle{},
 		&domain.Delivery{},
+		&domain.FeatureFlag{},
 	)
 }
