@@ -57,6 +57,24 @@ func (r *UserRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*
 	return &u, nil
 }
 
+// FindByOAuthSubject looks up a user by their external OAuth identity,
+// globally (no tenant scoping). Used by the OAuth2 login flow to decide
+// whether this is a returning user (reuse the row, and whatever tenant it
+// belongs to) or a first-time sign-in (create a new tenant + user).
+func (r *UserRepository) FindByOAuthSubject(ctx context.Context, subject string) (*domain.User, error) {
+	var u domain.User
+	err := r.db.WithContext(ctx).
+		Where("oauth_subject = ?", subject).
+		First(&u).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (r *UserRepository) List(ctx context.Context, tenantID uuid.UUID, page, pageSize int) ([]domain.User, int64, error) {
 	page, pageSize = normalizePage(page, pageSize)
 

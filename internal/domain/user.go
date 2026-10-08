@@ -19,10 +19,16 @@ type User struct {
 	Name     string    `gorm:"not null" json:"name"`
 	Role     UserRole  `gorm:"type:varchar(20);not null" json:"role"`
 
-	// OAuthSubject stores the identity provider's unique subject/object id
-	// (e.g. the Microsoft Entra ID "oid" claim), populated once OAuth2
-	// login is wired up.
-	OAuthSubject *string `gorm:"index" json:"-"`
+	// OAuthSubject stores the identity provider's unique subject id (the
+	// Google "sub" claim), populated by the OAuth2 login flow. It's a
+	// GLOBAL unique key, not scoped to a tenant: a Google account carries
+	// no organization claim, so a login is identified purely by this
+	// subject, independent of which tenant it ends up belonging to (see
+	// AuthService.HandleGoogleLogin). The column name is pinned
+	// explicitly rather than left to GORM's camelCase-to-snake_case
+	// guess — "OAuth" is exactly the kind of mixed-case prefix that
+	// convention is ambiguous about.
+	OAuthSubject *string `gorm:"column:oauth_subject;uniqueIndex" json:"-"`
 
 	Tenant Tenant `gorm:"foreignKey:TenantID" json:"-"`
 }

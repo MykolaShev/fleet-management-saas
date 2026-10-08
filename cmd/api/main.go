@@ -1,22 +1,23 @@
 // Package main is the entrypoint for the Fleet Management SaaS API server.
-//
-// At this stage it wires up config + database (schema via AutoMigrate) and
-// exposes a /health endpoint. CRUD routes are added as part of the REST API
-// stage.
 package main
 
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/MykolaShev/fleet-management-saas/internal/auth"
 	"github.com/MykolaShev/fleet-management-saas/internal/config"
 	"github.com/MykolaShev/fleet-management-saas/internal/handler"
 	"github.com/MykolaShev/fleet-management-saas/internal/platform/postgres"
 	"github.com/MykolaShev/fleet-management-saas/internal/repository"
 	"github.com/MykolaShev/fleet-management-saas/internal/service"
 )
+
+// sessionTokenTTL is how long a session JWT stays valid after login.
+const sessionTokenTTL = 24 * time.Hour
 
 func main() {
 	cfg := config.Load()
@@ -56,16 +57,38 @@ func main() {
 	featureFlagService := service.NewFeatureFlagService(featureFlagRepo)
 	featureFlagHandler := handler.NewFeatureFlagHandler(featureFlagService)
 
+	jwtIssuer := auth.NewJWTIssuer(cfg.JWTSecret, sessionTokenTTL)
+	oauthConfig := auth.NewOAuth2Config(auth.GoogleConfig{
+		ClientID:     cfg.OAuthClientID,
+		ClientSecret: cfg.OAuthClientSecret,
+		RedirectURL:  cfg.OAuthRedirectURL,
+	})
+	authService := service.NewAuthService(tenantRepo, userRepo, jwtIssuer)
+	authHandler := handler.NewAuthHandler(oauthConfig, authService, jwtIssuer, tenantRepo)
+
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	api := router.Group("/api/v1", handler.EnsureTenant(tenantRepo))
-	vehicleHandler.RegisterRoutes(api)
-	userHandler.RegisterRoutes(api)
-	deliveryHandler.RegisterRoutes(api)
-	featureFlagHandler.RegisterRoutes(api)
+	api := router.Group("/api/v1")
+
+	// Public: this is how a client gets a token in the first place, so it
+	// must sit outside the Authenticate middleware below.
+	authHandler.RegisterRoutes(api)
+	if cfg.AppEnv == "local" {
+		// Dev-only shortcut so Postman/CI can get a valid session token
+		// without a real Google account. Never registered outside local
+		// development — see AuthHandler.RegisterDevRoutes.
+		authHandler.RegisterDevRoutes(api)
+		log.Println("APP_ENV=local: /api/v1/auth/dev-token is enabled")
+	}
+
+	protected := api.Group("", handler.Authenticate(jwtIssuer))
+	vehicleHandler.RegisterRoutes(protected)
+	userHandler.RegisterRoutes(protected)
+	deliveryHandler.RegisterRoutes(protected)
+	featureFlagHandler.RegisterRoutes(protected)
 
 	log.Printf("starting server on :%s", cfg.AppPort)
 	if err := router.Run(":" + cfg.AppPort); err != nil {
