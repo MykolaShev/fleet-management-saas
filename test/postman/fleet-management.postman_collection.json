@@ -1,0 +1,586 @@
+{
+    "info": {
+      "name": "Fleet Management SaaS - API Tests (QA1)",
+      "description": "Black-box API tests against the running server. Assumes a clean database (fresh docker-compose stack) since it creates real records and doesn't clean up after itself. Run top-to-bottom in collection order (requests depend on IDs saved by earlier requests).",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+      { "key": "base_url", "value": "http://localhost:8080" },
+      { "key": "tenant_id", "value": "" },
+      { "key": "tenant_id_other", "value": "" },
+      { "key": "vehicle_id", "value": "" },
+      { "key": "manager_id", "value": "" },
+      { "key": "driver_id", "value": "" },
+      { "key": "delivery_vehicle_id", "value": "" },
+      { "key": "foreign_vehicle_id", "value": "" },
+      { "key": "delivery_id", "value": "" },
+      { "key": "assigned_delivery_id", "value": "" }
+    ],
+    "event": [
+      {
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "if (!pm.collectionVariables.get('tenant_id')) {",
+            "    pm.collectionVariables.set('tenant_id', pm.variables.replaceIn('{{$guid}}'));",
+            "}",
+            "if (!pm.collectionVariables.get('tenant_id_other')) {",
+            "    pm.collectionVariables.set('tenant_id_other', pm.variables.replaceIn('{{$guid}}'));",
+            "}"
+          ]
+        }
+      }
+    ],
+    "item": [
+      {
+        "name": "1. Health",
+        "item": [
+          {
+            "name": "Health check",
+            "request": {
+              "method": "GET",
+              "header": [],
+              "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('status field is ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "2. Vehicles",
+        "item": [
+          {
+            "name": "Create vehicle",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"plate_number\":\"AA1234BC\",\"model\":\"Ford Transit\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/vehicles", "host": ["{{base_url}}"], "path": ["api", "v1", "vehicles"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                    "const json = pm.response.json();",
+                    "pm.test('status defaults to idle', () => pm.expect(json.status).to.eql('idle'));",
+                    "pm.collectionVariables.set('vehicle_id', json.id);"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create 2 more vehicles (for pagination)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"plate_number\":\"BB0001\",\"model\":\"Sprinter\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/vehicles", "host": ["{{base_url}}"], "path": ["api", "v1", "vehicles"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": ["pm.test('status is 201', () => pm.response.to.have.status(201));"]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create 3rd vehicle (for pagination)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"plate_number\":\"CC0002\",\"model\":\"Sprinter\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/vehicles", "host": ["{{base_url}}"], "path": ["api", "v1", "vehicles"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": ["pm.test('status is 201', () => pm.response.to.have.status(201));"]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get vehicle by id",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "X-Tenant-ID", "value": "{{tenant_id}}" }],
+              "url": {
+                "raw": "{{base_url}}/api/v1/vehicles/{{vehicle_id}}",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "vehicles", "{{vehicle_id}}"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('plate number matches', () => pm.expect(pm.response.json().plate_number).to.eql('AA1234BC'));"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "List vehicles (page 1, size 2) - pagination (B1)",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "X-Tenant-ID", "value": "{{tenant_id}}" }],
+              "url": {
+                "raw": "{{base_url}}/api/v1/vehicles?page=1&page_size=2",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "vehicles"],
+                "query": [
+                  { "key": "page", "value": "1" },
+                  { "key": "page_size", "value": "2" }
+                ]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('returns exactly page_size items', () => pm.expect(json.items.length).to.eql(2));",
+                    "pm.test('total_items is 3', () => pm.expect(json.total_items).to.eql(3));",
+                    "pm.test('total_pages is 2', () => pm.expect(json.total_pages).to.eql(2));"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Update vehicle (PATCH)",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"model\":\"Ford Transit Custom\",\"status\":\"en_route\"}" },
+              "url": {
+                "raw": "{{base_url}}/api/v1/vehicles/{{vehicle_id}}",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "vehicles", "{{vehicle_id}}"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('model updated', () => pm.expect(json.model).to.eql('Ford Transit Custom'));",
+                    "pm.test('status updated', () => pm.expect(json.status).to.eql('en_route'));"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Get non-existent vehicle -> 404",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "X-Tenant-ID", "value": "{{tenant_id}}" }],
+              "url": {
+                "raw": "{{base_url}}/api/v1/vehicles/00000000-0000-0000-0000-000000000000",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "vehicles", "00000000-0000-0000-0000-000000000000"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('status is 404', () => pm.response.to.have.status(404));"] }
+              }
+            ]
+          },
+          {
+            "name": "Delete vehicle",
+            "request": {
+              "method": "DELETE",
+              "header": [{ "key": "X-Tenant-ID", "value": "{{tenant_id}}" }],
+              "url": {
+                "raw": "{{base_url}}/api/v1/vehicles/{{vehicle_id}}",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "vehicles", "{{vehicle_id}}"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('status is 204', () => pm.response.to.have.status(204));"] }
+              }
+            ]
+          },
+          {
+            "name": "Get deleted vehicle -> 404",
+            "request": {
+              "method": "GET",
+              "header": [{ "key": "X-Tenant-ID", "value": "{{tenant_id}}" }],
+              "url": {
+                "raw": "{{base_url}}/api/v1/vehicles/{{vehicle_id}}",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "vehicles", "{{vehicle_id}}"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": ["pm.test('status is 404 after delete', () => pm.response.to.have.status(404));"]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "3. Users",
+        "item": [
+          {
+            "name": "Create manager",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"manager@acme.test\",\"name\":\"Ada\",\"role\":\"manager\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/users", "host": ["{{base_url}}"], "path": ["api", "v1", "users"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                    "pm.test('role is manager', () => pm.expect(json.role).to.eql('manager'));",
+                    "pm.collectionVariables.set('manager_id', json.id);"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create driver",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"driver@acme.test\",\"name\":\"Dmytro\",\"role\":\"driver\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/users", "host": ["{{base_url}}"], "path": ["api", "v1", "users"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                    "pm.collectionVariables.set('driver_id', json.id);"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create duplicate email in same tenant -> 409",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"manager@acme.test\",\"name\":\"Someone Else\",\"role\":\"driver\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/users", "host": ["{{base_url}}"], "path": ["api", "v1", "users"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('status is 409', () => pm.response.to.have.status(409));"] }
+              }
+            ]
+          },
+          {
+            "name": "Same email in a different tenant -> 201 (tenant-scoped uniqueness)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id_other}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"manager@acme.test\",\"name\":\"Same Email Other Tenant\",\"role\":\"manager\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/users", "host": ["{{base_url}}"], "path": ["api", "v1", "users"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": ["pm.test('status is 201 (different tenant, same email is fine)', () => pm.response.to.have.status(201));"]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create user with invalid role -> 422",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"email\":\"owner@acme.test\",\"name\":\"Owner\",\"role\":\"owner\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/users", "host": ["{{base_url}}"], "path": ["api", "v1", "users"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": { "type": "text/javascript", "exec": ["pm.test('status is 422', () => pm.response.to.have.status(422));"] }
+              }
+            ]
+          },
+          {
+            "name": "Update user name (PATCH)",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"name\":\"Ada Lovelace\"}" },
+              "url": {
+                "raw": "{{base_url}}/api/v1/users/{{manager_id}}",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "users", "{{manager_id}}"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('name updated', () => pm.expect(json.name).to.eql('Ada Lovelace'));",
+                    "pm.test('role untouched', () => pm.expect(json.role).to.eql('manager'));"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "4. Deliveries",
+        "item": [
+          {
+            "name": "Create vehicle for delivery assignment",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"plate_number\":\"DD1234\",\"model\":\"Delivery Van\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/vehicles", "host": ["{{base_url}}"], "path": ["api", "v1", "vehicles"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                    "pm.collectionVariables.set('delivery_vehicle_id', json.id);"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create vehicle in the OTHER tenant (to test cross-tenant rejection)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id_other}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"plate_number\":\"FOREIGN1\",\"model\":\"Not Yours\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/vehicles", "host": ["{{base_url}}"], "path": ["api", "v1", "vehicles"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                    "pm.collectionVariables.set('foreign_vehicle_id', json.id);"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create delivery with no assignment -> pending",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"pickup_address\":\"Warehouse 1\",\"dropoff_address\":\"Client St 42\"}" },
+              "url": { "raw": "{{base_url}}/api/v1/deliveries", "host": ["{{base_url}}"], "path": ["api", "v1", "deliveries"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                    "pm.test('delivery status is pending', () => pm.expect(json.status).to.eql('pending'));",
+                    "pm.collectionVariables.set('delivery_id', json.id);"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create delivery WITH vehicle+driver -> assigned",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"pickup_address\":\"Warehouse 2\",\"dropoff_address\":\"Client St 99\",\"vehicle_id\":\"{{delivery_vehicle_id}}\",\"driver_id\":\"{{driver_id}}\"}"
+              },
+              "url": { "raw": "{{base_url}}/api/v1/deliveries", "host": ["{{base_url}}"], "path": ["api", "v1", "deliveries"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                    "pm.test('delivery status is assigned', () => pm.expect(json.status).to.eql('assigned'));",
+                    "pm.test('vehicle_id is set', () => pm.expect(json.vehicle_id).to.eql(pm.collectionVariables.get('delivery_vehicle_id')));",
+                    "pm.collectionVariables.set('assigned_delivery_id', json.id);"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Create delivery with a FOREIGN tenant's vehicle -> 422 (cross-tenant guard)",
+            "request": {
+              "method": "POST",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"pickup_address\":\"A\",\"dropoff_address\":\"B\",\"vehicle_id\":\"{{foreign_vehicle_id}}\"}"
+              },
+              "url": { "raw": "{{base_url}}/api/v1/deliveries", "host": ["{{base_url}}"], "path": ["api", "v1", "deliveries"] }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "pm.test('status is 422 (vehicle belongs to another tenant)', () => pm.response.to.have.status(422));"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "Unassign vehicle from the assigned delivery (PATCH)",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "X-Tenant-ID", "value": "{{tenant_id}}" }
+              ],
+              "body": { "mode": "raw", "raw": "{\"unassign_vehicle\":true}" },
+              "url": {
+                "raw": "{{base_url}}/api/v1/deliveries/{{assigned_delivery_id}}",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "deliveries", "{{assigned_delivery_id}}"]
+              }
+            },
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const json = pm.response.json();",
+                    "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                    "pm.test('vehicle_id is null after unassign', () => pm.expect(json.vehicle_id).to.eql(null));"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }

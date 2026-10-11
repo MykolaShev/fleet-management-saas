@@ -29,20 +29,6 @@ func (h *VehicleHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.DELETE("/vehicles/:id", h.Delete)
 }
 
-// tenantID is a stand-in until OAuth2 (C16) supplies it from a verified JWT.
-// Reading it from a header keeps the API testable end-to-end right now;
-// B5 (tenant isolation) will replace this with middleware that derives the
-// tenant from the authenticated session instead of trusting a client header.
-func tenantID(c *gin.Context) (uuid.UUID, bool) {
-	raw := c.GetHeader("X-Tenant-ID")
-	id, err := uuid.Parse(raw)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing or invalid X-Tenant-ID header"})
-		return uuid.Nil, false
-	}
-	return id, true
-}
-
 type createVehicleRequest struct {
 	PlateNumber string `json:"plate_number" binding:"required"`
 	Model       string `json:"model"`

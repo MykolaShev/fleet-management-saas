@@ -74,7 +74,7 @@ project.
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.25+
 - Docker & Docker Compose
 - PostgreSQL client (optional, for manual DB access)
 - Node.js 18+ (later, for the frontend)
@@ -90,11 +90,18 @@ cd fleet-management-saas
 cp .env.example .env
 
 # 3. Start local infrastructure (Postgres, Redis)
-docker compose -f deployments/docker/docker-compose.yml up -d
+make up
 
 # 4. Run the API
 go run ./cmd/api
 ```
+
+> `make up` starts only Postgres and Redis — the fast loop for day-to-day development,
+> where you run the API with `go run` directly. The containerized API itself sits
+> behind a Compose `profile` and isn't started by default; use `make up-full` to run
+> the complete stack (Postgres + Redis + the API, all containerized) when you
+> specifically want to validate the Docker build, e.g. before a C4 demo. Don't run
+> both at once — they'd fight over port 8080.
 
 ### Running tests
 
@@ -110,6 +117,7 @@ are verified.
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — implementation roadmap and current progress
 - [`docs/TESTING.md`](docs/TESTING.md) — testing strategy per stage type
+- [`docs/VIDEO_CHECKLIST.md`](docs/VIDEO_CHECKLIST.md) — what to demonstrate on camera per completed stage
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture decisions *(added as the project grows)*
 
 ## License

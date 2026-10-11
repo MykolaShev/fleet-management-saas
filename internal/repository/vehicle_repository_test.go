@@ -19,15 +19,31 @@ import (
 // real repository/query logic without needing Docker in CI. It is not a
 // substitute for testing against real Postgres (see docs/TESTING.md) —
 // that's covered by the docker-compose health-check smoke test.
+//
+// SQLite does NOT enforce foreign keys by default (unlike Postgres), so we
+// turn it on explicitly here. Without this, a test could insert a Vehicle
+// referencing a Tenant that was never created and still pass locally,
+// while the exact same insert fails against real Postgres with a foreign
+// key violation — which is exactly what happened before this fix.
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	require.NoError(t, db.Exec("PRAGMA foreign_keys = ON").Error)
 
 	require.NoError(t, db.AutoMigrate(&domain.Tenant{}, &domain.Vehicle{}))
 
 	return db
+}
+
+// createTestTenant inserts a minimal Tenant row so FK-constrained inserts
+// (Vehicle/User/Delivery, all of which reference tenants.id) succeed. Every
+// test that creates one of those now needs a tenant to exist first — this
+// mirrors what TenantRepository.FindOrCreate does for real requests.
+func createTestTenant(t *testing.T, db *gorm.DB, id uuid.UUID) {
+	t.Helper()
+	require.NoError(t, db.Create(&domain.Tenant{BaseModel: domain.BaseModel{ID: id}, Name: "Test Tenant"}).Error)
 }
 
 func TestVehicleRepository_CreateAndGet(t *testing.T) {
@@ -36,6 +52,7 @@ func TestVehicleRepository_CreateAndGet(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	v := &domain.Vehicle{TenantID: tenantID, PlateNumber: "AA1234BC", Model: "Ford Transit"}
 
 	require.NoError(t, repo.Create(ctx, v))
@@ -66,6 +83,8 @@ func TestVehicleRepository_List_IsScopedToTenant(t *testing.T) {
 
 	tenantA := uuid.New()
 	tenantB := uuid.New()
+	createTestTenant(t, db, tenantA)
+	createTestTenant(t, db, tenantB)
 
 	require.NoError(t, repo.Create(ctx, &domain.Vehicle{TenantID: tenantA, PlateNumber: "A1"}))
 	require.NoError(t, repo.Create(ctx, &domain.Vehicle{TenantID: tenantA, PlateNumber: "A2"}))
@@ -83,6 +102,7 @@ func TestVehicleRepository_List_Pagination(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	for i := 0; i < 5; i++ {
 		require.NoError(t, repo.Create(ctx, &domain.Vehicle{TenantID: tenantID, PlateNumber: "V"}))
 	}
@@ -115,6 +135,7 @@ func TestVehicleRepository_Update_PersistsZeroValueModel(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	v := &domain.Vehicle{TenantID: tenantID, PlateNumber: "P1", Model: "Old Model"}
 	require.NoError(t, repo.Create(ctx, v))
 
@@ -132,6 +153,7 @@ func TestVehicleRepository_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	v := &domain.Vehicle{TenantID: tenantID, PlateNumber: "DEL1"}
 	require.NoError(t, repo.Create(ctx, v))
 

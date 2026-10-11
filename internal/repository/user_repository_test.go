@@ -30,6 +30,7 @@ func TestUserRepository_CreateAndGet(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	u := &domain.User{TenantID: tenantID, Email: "manager@acme.test", Name: "Ada", Role: domain.RoleManager}
 
 	require.NoError(t, repo.Create(ctx, u))
@@ -47,6 +48,7 @@ func TestUserRepository_Create_DuplicateEmailInSameTenant(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	require.NoError(t, repo.Create(ctx, &domain.User{TenantID: tenantID, Email: "dup@acme.test", Role: domain.RoleDriver}))
 
 	err := repo.Create(ctx, &domain.User{TenantID: tenantID, Email: "dup@acme.test", Role: domain.RoleDriver})
@@ -60,8 +62,13 @@ func TestUserRepository_Create_SameEmailAcrossDifferentTenants(t *testing.T) {
 	repo := repository.NewUserRepository(db)
 	ctx := context.Background()
 
-	require.NoError(t, repo.Create(ctx, &domain.User{TenantID: uuid.New(), Email: "shared@acme.test", Role: domain.RoleDriver}))
-	err := repo.Create(ctx, &domain.User{TenantID: uuid.New(), Email: "shared@acme.test", Role: domain.RoleDriver})
+	tenantA := uuid.New()
+	tenantB := uuid.New()
+	createTestTenant(t, db, tenantA)
+	createTestTenant(t, db, tenantB)
+
+	require.NoError(t, repo.Create(ctx, &domain.User{TenantID: tenantA, Email: "shared@acme.test", Role: domain.RoleDriver}))
+	err := repo.Create(ctx, &domain.User{TenantID: tenantB, Email: "shared@acme.test", Role: domain.RoleDriver})
 	assert.NoError(t, err)
 }
 
@@ -81,6 +88,8 @@ func TestUserRepository_List_IsScopedToTenant(t *testing.T) {
 
 	tenantA := uuid.New()
 	tenantB := uuid.New()
+	createTestTenant(t, db, tenantA)
+	createTestTenant(t, db, tenantB)
 
 	require.NoError(t, repo.Create(ctx, &domain.User{TenantID: tenantA, Email: "a1@acme.test", Role: domain.RoleDriver}))
 	require.NoError(t, repo.Create(ctx, &domain.User{TenantID: tenantA, Email: "a2@acme.test", Role: domain.RoleManager}))
@@ -98,6 +107,7 @@ func TestUserRepository_Update_PersistsChange(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	u := &domain.User{TenantID: tenantID, Email: "old@acme.test", Name: "Old Name", Role: domain.RoleDriver}
 	require.NoError(t, repo.Create(ctx, u))
 
@@ -126,6 +136,7 @@ func TestUserRepository_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	u := &domain.User{TenantID: tenantID, Email: "del@acme.test", Role: domain.RoleDriver}
 	require.NoError(t, repo.Create(ctx, u))
 

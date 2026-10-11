@@ -27,6 +27,7 @@ func TestDeliveryRepository_CreateAndGet(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	d := &domain.Delivery{
 		TenantID:       tenantID,
 		Status:         domain.DeliveryPending,
@@ -49,10 +50,15 @@ func TestDeliveryRepository_AssignThenUnassignVehicle(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	d := &domain.Delivery{TenantID: tenantID, Status: domain.DeliveryPending, PickupAddress: "A", DropoffAddress: "B"}
 	require.NoError(t, repo.Create(ctx, d))
 
-	vehicleID := uuid.New()
+	// Delivery.VehicleID has its own FK to vehicles.id, so — same as the
+	// tenant FK above — this needs a real Vehicle row, not just any UUID.
+	vehicle := &domain.Vehicle{TenantID: tenantID, PlateNumber: "ASSIGN1"}
+	require.NoError(t, repository.NewVehicleRepository(db).Create(ctx, vehicle))
+	vehicleID := vehicle.ID
 	d.VehicleID = &vehicleID
 	d.Status = domain.DeliveryAssigned
 	require.NoError(t, repo.Update(ctx, tenantID, d))
@@ -80,6 +86,8 @@ func TestDeliveryRepository_List_IsScopedToTenant(t *testing.T) {
 
 	tenantA := uuid.New()
 	tenantB := uuid.New()
+	createTestTenant(t, db, tenantA)
+	createTestTenant(t, db, tenantB)
 
 	require.NoError(t, repo.Create(ctx, &domain.Delivery{TenantID: tenantA, PickupAddress: "A1", DropoffAddress: "B1"}))
 	require.NoError(t, repo.Create(ctx, &domain.Delivery{TenantID: tenantA, PickupAddress: "A2", DropoffAddress: "B2"}))
@@ -106,6 +114,7 @@ func TestDeliveryRepository_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := uuid.New()
+	createTestTenant(t, db, tenantID)
 	d := &domain.Delivery{TenantID: tenantID, PickupAddress: "A", DropoffAddress: "B"}
 	require.NoError(t, repo.Create(ctx, d))
 
