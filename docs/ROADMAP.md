@@ -9,12 +9,12 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 
 | Item | Description                          | Status |
 |------|---------------------------------------|--------|
-| Pet project | Standalone API, documented & polished | ⬜ |
-| REST API CRUD | Core CRUD endpoints                  | ✅ |
+| Pet project | Standalone API, documented & polished | ✅ |
+| REST API CRUD | Core CRUD endpoints (Vehicle, User, Delivery) | ✅ |
 | Pagination | List endpoints support pagination       | ✅ |
 | Docker | Containerized app + local dev stack         | ✅ |
-| CI/CD | GitHub Actions pipeline (lint/test/build)    | ⬜ |
-| Cloud deploy | Deployed to a free-tier cloud provider  | ⬜ (provider decision deferred to Week 3 — pending own research) |
+| CI/CD | GitHub Actions pipeline (build, test, Docker smoke-test, Postman) | ✅ (actual *deploy* step still pending — added once C2's provider is picked) |
+| Cloud deploy | Deployed to a free-tier cloud provider  | ⬜ (paused — provider decision pending, no Azure for Students available; researching alternatives) |
 | API tests | Automated API test suite (Postman/Newman) | ✅ |
 | Caching | Redis-backed caching layer                  | ⬜ |
 
@@ -22,10 +22,10 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 
 | Item | Description                          | Status |
 |------|---------------------------------------|--------|
-| OAuth2 | Login via Microsoft identity platform      | ⬜ |
-| Tenant isolation | Data scoped per tenant             | ⬜ |
-| Auth tests | Automated auth/authorization tests    | ⬜ |
-| Feature flags | Per-tenant feature toggles           | ⬜ |
+| OAuth2 | Login via an existing provider — switched from Microsoft to **Google** (course allows Microsoft/Google/Facebook; Microsoft Entra ID's organization/tenant setup was impractical without an existing org) | ✅ |
+| Tenant isolation | Data scoped per tenant — enforced in every repository query (`WHERE tenant_id = ?`), no dedicated file, proven by the authorization test suite | ✅ |
+| Auth tests | Automated auth/authorization tests (missing/garbage/expired/wrong-secret token, cross-tenant read/delete/list/assign) | ✅ |
+| Feature flags | Per-tenant feature toggles           | ✅ |
 
 ## AI Agent
 
@@ -49,7 +49,7 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 | SPA | React single-page application               | ⬜ |
 | Autocomplete | SQL-backed search autocomplete      | ⬜ |
 | Charts | Data visualizations (Chart.js)            | ⬜ |
-| MSAL.js | Microsoft Graph integration on frontend  | ⬜ |
+| MSAL.js + Microsoft Graph | Microsoft-specific — needs re-scoping since auth is now Google-based. Revisit: either swap for Google Identity Services JS, or treat as a separately justified exception | ⬜ (blocked on a decision) |
 
 ## Serverless + Async
 

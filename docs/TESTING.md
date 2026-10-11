@@ -78,6 +78,21 @@ containerized.
   correct payload and calls the client, with the HTTP client mocked — real
   delivery is not exercised in automated tests.
 
+### 6. Auth / authorization (OAuth2 + multi-tenancy)
+The OAuth2 handshake itself (redirect to the provider, human login, consent
+screen) is not automatable without a real test account and browser
+automation — it's demonstrated manually / on video, not in CI.
+
+**Proof:**
+- Token issuance/validation logic (our own JWT): fully unit-testable —
+  issue/parse roundtrip, expiry rejection, tampered-signature rejection.
+- Claims → tenant/user mapping business logic: unit-tested with fake claims,
+  no real provider involved.
+- Authorization (does a valid/invalid/cross-tenant token get the right
+  response): end-to-end test against the real router + real middleware,
+  in-memory DB — this is where tenant isolation is actually proven, since
+  there's no dedicated "isolation" code to unit-test in isolation.
+
 ## Stage → Evidence Log
 
 | Stage | Category | Evidence type | Location |
@@ -87,7 +102,8 @@ containerized.
 | C5 (Delivery) / B1 | code-centric | unit tests (service, fake repo + fake vehicle/user lookups, incl. cross-tenant assignment rejection) + integration tests (repository, in-memory SQLite, incl. assign/unassign NULL persistence) | `internal/service/delivery_service_test.go`, `internal/repository/delivery_repository_test.go` |
 | C4 | infrastructure | smoke-test script: `docker compose up --build`, poll `/health`, exercise real Vehicle CRUD against the containerized stack, then tear down | `scripts/smoke-test.sh` (run via `make smoke-test`) |
 | QA1 | code-centric (black-box) | Postman/Newman collection: full CRUD + pagination on all 3 entities, plus business-rule checks (tenant-scoped email uniqueness, cross-tenant vehicle/driver assignment rejection) | `test/postman/fleet-management.postman_collection.json` (run via `make postman-test`) |
+| B6 | code-centric | unit tests (service, fake repo: catalog merge, unknown-key rejection, default-false behavior) + integration tests (repository, in-memory SQLite: upsert not duplicate, tenant scoping) + Postman folder 4 | `internal/service/feature_flag_service_test.go`, `internal/repository/feature_flag_repository_test.go` |
+| C3 | infrastructure | the pipeline itself passing on every push/PR (green GitHub Actions badge in README) — runs `go test`, the C4 smoke-test, and the QA1 Postman collection, all on GitHub's own runner | `.github/workflows/ci.yml` |
+| C16 | auth (code-centric + manual) | unit tests (JWT issue/parse incl. expiry/tamper rejection; AuthService claims→tenant/user mapping with fakes, incl. new-tenant-per-new-user and returning-user reuse) — the live Google redirect itself is demo-only, confirmed manually via a real browser login, not automatable without a real test account | `internal/auth/jwt_test.go`, `internal/service/auth_service_test.go` |
+| QA3 (covers B5 too) | auth (end-to-end, real HTTP) | full router + real `Authenticate` middleware against in-memory SQLite: missing/garbage/expired/wrong-secret token → 401; cross-tenant read/delete/list/assign → 404 or 422; feature-flag isolation. This is also the only evidence for B5 (tenant isolation) — there's no separate file for it, since isolation is a property of every repository's `WHERE tenant_id = ?`, not a standalone feature | `test/integration/authorization_test.go` |
 | _(filled in as further stages are completed)_ | | | |
-
-This table is the source of truth for "this stage is done and provably so" —
-update it as part of finishing each stage, not as a separate cleanup pass.
