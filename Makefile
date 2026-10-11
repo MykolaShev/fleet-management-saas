@@ -1,4 +1,4 @@
-.PHONY: run build test lint up down tidy
+.PHONY: run build test lint up down tidy smoke-test
 
 run:
 	go run ./cmd/api
@@ -20,3 +20,6 @@ down:
 
 tidy:
 	go mod tidy
+
+smoke-test:
+	./scripts/smoke-test.sh
