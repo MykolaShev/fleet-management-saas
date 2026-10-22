@@ -31,8 +31,8 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 
 | Item | Description                          | Status |
 |------|---------------------------------------|--------|
-| AI logistics agent | Chat agent with SSE streaming | ⬜ |
-| MCP server | Tools: coordinates, ETA, status update  | ⬜ |
+| AI logistics agent | Chat agent with SSE streaming, tool-calling decide/act/answer flow, raw-SSE visibility into tool calls (no frontend yet to render it) | 🟨 (code complete locally, pending `go build`/`go test` confirmation and merge of `stage/C21` into `main`) |
+| MCP server | Tools: `get_vehicle_location`, `get_delivery_eta` (honest stub — no live GPS yet), `update_delivery_status` | 🟨 (code complete locally, same branch/merge status as above) |
 
 ## Map + Real-time
 

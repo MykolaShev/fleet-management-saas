@@ -1,4 +1,0 @@
-# Shell scripts must always use LF line endings — bash chokes on a
-# trailing \r at the end of each line (CRLF), which is what Windows git
-# checkouts produce by default otherwise.
-*.sh text eol=lf
