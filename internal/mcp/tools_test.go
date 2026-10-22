@@ -68,16 +68,25 @@ func (f *fakeDeliveries) UpdateStatus(_ context.Context, tenantID, id uuid.UUID,
 	return &d, nil
 }
 
-func newServerWithFleetTools() (*mcp.Server, *fakeVehicles, *fakeDeliveries) {
+type fakeDrivers struct {
+	byTenant map[uuid.UUID][]domain.User
+}
+
+func (f *fakeDrivers) ListDrivers(_ context.Context, tenantID uuid.UUID) ([]domain.User, error) {
+	return f.byTenant[tenantID], nil
+}
+
+func newServerWithFleetTools() (*mcp.Server, *fakeVehicles, *fakeDeliveries, *fakeDrivers) {
 	vehicles := &fakeVehicles{byTenant: map[uuid.UUID]map[uuid.UUID]domain.Vehicle{}}
 	deliveries := &fakeDeliveries{byTenant: map[uuid.UUID]map[uuid.UUID]domain.Delivery{}}
+	drivers := &fakeDrivers{byTenant: map[uuid.UUID][]domain.User{}}
 	s := mcp.NewServer()
-	mcp.RegisterFleetTools(s, vehicles, deliveries, deliveries)
-	return s, vehicles, deliveries
+	mcp.RegisterFleetTools(s, vehicles, deliveries, deliveries, drivers)
+	return s, vehicles, deliveries, drivers
 }
 
 func TestGetVehicleLocation_NoPositionYet_ReturnsHonestStub(t *testing.T) {
-	s, vehicles, _ := newServerWithFleetTools()
+	s, vehicles, _, _ := newServerWithFleetTools()
 
 	tenant := uuid.New()
 	vehicleID := uuid.New()
@@ -93,7 +102,7 @@ func TestGetVehicleLocation_NoPositionYet_ReturnsHonestStub(t *testing.T) {
 }
 
 func TestGetVehicleLocation_WithPosition_ReturnsCoordinates(t *testing.T) {
-	s, vehicles, _ := newServerWithFleetTools()
+	s, vehicles, _, _ := newServerWithFleetTools()
 
 	tenant := uuid.New()
 	vehicleID := uuid.New()
@@ -110,7 +119,7 @@ func TestGetVehicleLocation_WithPosition_ReturnsCoordinates(t *testing.T) {
 }
 
 func TestGetVehicleLocation_CrossTenant_IsRejected(t *testing.T) {
-	s, vehicles, _ := newServerWithFleetTools()
+	s, vehicles, _, _ := newServerWithFleetTools()
 
 	ownerTenant := uuid.New()
 	otherTenant := uuid.New()
@@ -126,7 +135,7 @@ func TestGetVehicleLocation_CrossTenant_IsRejected(t *testing.T) {
 }
 
 func TestGetDeliveryETA_ReturnsHonestNotAvailableStub(t *testing.T) {
-	s, _, deliveries := newServerWithFleetTools()
+	s, _, deliveries, _ := newServerWithFleetTools()
 
 	tenant := uuid.New()
 	deliveryID := uuid.New()
@@ -142,7 +151,7 @@ func TestGetDeliveryETA_ReturnsHonestNotAvailableStub(t *testing.T) {
 }
 
 func TestUpdateDeliveryStatus_UpdatesAndReturnsConfirmation(t *testing.T) {
-	s, _, deliveries := newServerWithFleetTools()
+	s, _, deliveries, _ := newServerWithFleetTools()
 
 	tenant := uuid.New()
 	deliveryID := uuid.New()
@@ -158,8 +167,36 @@ func TestUpdateDeliveryStatus_UpdatesAndReturnsConfirmation(t *testing.T) {
 	assert.Equal(t, domain.DeliveryInTransit, deliveries.byTenant[tenant][deliveryID].Status)
 }
 
+func TestListDrivers_ReturnsOnlyThisTenantsDrivers(t *testing.T) {
+	s, _, _, drivers := newServerWithFleetTools()
+
+	tenant := uuid.New()
+	other := uuid.New()
+	drivers.byTenant[tenant] = []domain.User{
+		{BaseModel: domain.BaseModel{ID: uuid.New()}, Name: "Driver One", Email: "d1@x.com", Role: domain.RoleDriver},
+	}
+	drivers.byTenant[other] = []domain.User{
+		{BaseModel: domain.BaseModel{ID: uuid.New()}, Name: "Someone Else", Email: "d2@x.com", Role: domain.RoleDriver},
+	}
+
+	result, err := s.Call(context.Background(), tenant, "list_drivers", json.RawMessage(`{}`))
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "Driver One")
+	assert.NotContains(t, result, "Someone Else")
+}
+
+func TestListDrivers_NoDrivers_ReturnsHonestStub(t *testing.T) {
+	s, _, _, _ := newServerWithFleetTools()
+
+	result, err := s.Call(context.Background(), uuid.New(), "list_drivers", json.RawMessage(`{}`))
+
+	require.NoError(t, err)
+	assert.Contains(t, result, "no drivers")
+}
+
 func TestUpdateDeliveryStatus_CrossTenant_IsRejected(t *testing.T) {
-	s, _, deliveries := newServerWithFleetTools()
+	s, _, deliveries, _ := newServerWithFleetTools()
 
 	ownerTenant := uuid.New()
 	otherTenant := uuid.New()

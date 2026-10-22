@@ -72,7 +72,7 @@ func main() {
 	// HTTP endpoint (so it's testable/demoable independently of the LLM
 	// agent) and the AI agent, which calls it in-process for tool-calling.
 	mcpServer := mcp.NewServer()
-	mcp.RegisterFleetTools(mcpServer, vehicleService, deliveryService, deliveryService)
+	mcp.RegisterFleetTools(mcpServer, vehicleService, deliveryService, deliveryService, userService)
 	mcpHandler := handler.NewMCPHandler(mcpServer)
 
 	groqClient := llm.NewGroqClient(cfg.LLMAPIKey, cfg.LLMModel)

@@ -183,3 +183,41 @@ func TestUserService_Delete_NotFound(t *testing.T) {
 
 	assert.ErrorIs(t, err, repository.ErrNotFound)
 }
+
+// ListDrivers is the narrow adapter internal/mcp's list_drivers tool
+// calls through — same reasoning as DeliveryService.UpdateStatus's tests.
+
+func TestUserService_ListDrivers_FiltersOutManagers(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := service.NewUserService(repo)
+	tenantID := uuid.New()
+
+	_, err := svc.Create(context.Background(), service.CreateUserInput{TenantID: tenantID, Email: "driver@x.com", Name: "D1", Role: domain.RoleDriver})
+	require.NoError(t, err)
+	_, err = svc.Create(context.Background(), service.CreateUserInput{TenantID: tenantID, Email: "manager@x.com", Name: "M1", Role: domain.RoleManager})
+	require.NoError(t, err)
+
+	drivers, err := svc.ListDrivers(context.Background(), tenantID)
+
+	require.NoError(t, err)
+	require.Len(t, drivers, 1)
+	assert.Equal(t, "D1", drivers[0].Name)
+}
+
+func TestUserService_ListDrivers_CrossTenant_ReturnsOnlyOwnTenant(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc := service.NewUserService(repo)
+	tenantA := uuid.New()
+	tenantB := uuid.New()
+
+	_, err := svc.Create(context.Background(), service.CreateUserInput{TenantID: tenantA, Email: "a@x.com", Name: "DA", Role: domain.RoleDriver})
+	require.NoError(t, err)
+	_, err = svc.Create(context.Background(), service.CreateUserInput{TenantID: tenantB, Email: "b@x.com", Name: "DB", Role: domain.RoleDriver})
+	require.NoError(t, err)
+
+	drivers, err := svc.ListDrivers(context.Background(), tenantA)
+
+	require.NoError(t, err)
+	require.Len(t, drivers, 1)
+	assert.Equal(t, "DA", drivers[0].Name)
+}

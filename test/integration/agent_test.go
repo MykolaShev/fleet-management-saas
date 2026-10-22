@@ -76,11 +76,12 @@ func newAgentTestApp(t *testing.T, fakeLLM *fakeLLMClient) *agentTestApp {
 	vehicleService := service.NewVehicleService(vehicleRepo)
 
 	userRepo := repository.NewUserRepository(db)
+	userService := service.NewUserService(userRepo)
 	deliveryRepo := repository.NewDeliveryRepository(db)
 	deliveryService := service.NewDeliveryService(deliveryRepo, vehicleRepo, userRepo)
 
 	mcpServer := mcp.NewServer()
-	mcp.RegisterFleetTools(mcpServer, vehicleService, deliveryService, deliveryService)
+	mcp.RegisterFleetTools(mcpServer, vehicleService, deliveryService, deliveryService, userService)
 
 	agentService := service.NewAgentService(fakeLLM, vehicleService, deliveryService, mcpServer)
 	agentHandler := handler.NewAgentHandler(agentService)

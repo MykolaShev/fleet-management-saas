@@ -34,6 +34,7 @@ type mcpTestApp struct {
 	tenantRepo   *repository.TenantRepository
 	vehicleRepo  *repository.VehicleRepository
 	deliveryRepo *repository.DeliveryRepository
+	userRepo     *repository.UserRepository
 }
 
 func newMCPTestApp(t *testing.T) *mcpTestApp {
@@ -51,11 +52,12 @@ func newMCPTestApp(t *testing.T) *mcpTestApp {
 	vehicleService := service.NewVehicleService(vehicleRepo)
 
 	userRepo := repository.NewUserRepository(db)
+	userService := service.NewUserService(userRepo)
 	deliveryRepo := repository.NewDeliveryRepository(db)
 	deliveryService := service.NewDeliveryService(deliveryRepo, vehicleRepo, userRepo)
 
 	mcpServer := mcp.NewServer()
-	mcp.RegisterFleetTools(mcpServer, vehicleService, deliveryService, deliveryService)
+	mcp.RegisterFleetTools(mcpServer, vehicleService, deliveryService, deliveryService, userService)
 	mcpHandler := handler.NewMCPHandler(mcpServer)
 
 	jwtIssuer := auth.NewJWTIssuer("test-secret", time.Hour)
@@ -65,7 +67,7 @@ func newMCPTestApp(t *testing.T) *mcpTestApp {
 	protected := api.Group("", handler.Authenticate(jwtIssuer))
 	mcpHandler.RegisterRoutes(protected)
 
-	return &mcpTestApp{router: router, jwtIssuer: jwtIssuer, tenantRepo: tenantRepo, vehicleRepo: vehicleRepo, deliveryRepo: deliveryRepo}
+	return &mcpTestApp{router: router, jwtIssuer: jwtIssuer, tenantRepo: tenantRepo, vehicleRepo: vehicleRepo, deliveryRepo: deliveryRepo, userRepo: userRepo}
 }
 
 func (a *mcpTestApp) post(t *testing.T, token string, req mcp.Request) *httptest.ResponseRecorder {
@@ -97,7 +99,7 @@ func TestMCP_Initialize_ReturnsServerInfo(t *testing.T) {
 	assert.Nil(t, resp.Error)
 }
 
-func TestMCP_ToolsList_ReturnsTheThreeFleetTools(t *testing.T) {
+func TestMCP_ToolsList_ReturnsAllFourFleetTools(t *testing.T) {
 	app := newMCPTestApp(t)
 	token, err := app.jwtIssuer.Issue(uuid.New(), uuid.New(), domain.RoleManager)
 	require.NoError(t, err)
@@ -111,7 +113,15 @@ func TestMCP_ToolsList_ReturnsTheThreeFleetTools(t *testing.T) {
 		} `json:"result"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Len(t, resp.Result.Tools, 3)
+	require.Len(t, resp.Result.Tools, 4) // C22's own minimum: 3 read + 1 write
+
+	names := make(map[string]bool, len(resp.Result.Tools))
+	for _, tool := range resp.Result.Tools {
+		names[tool.Name] = true
+	}
+	for _, want := range []string{"get_vehicle_location", "get_delivery_eta", "list_drivers", "update_delivery_status"} {
+		assert.True(t, names[want], "expected tool %q in tools/list", want)
+	}
 }
 
 func TestMCP_NoToken_Returns401(t *testing.T) {
@@ -188,4 +198,43 @@ func TestMCP_ToolsCall_UpdateDeliveryStatus_WorksForOwnTenant(t *testing.T) {
 	updated, err := app.deliveryRepo.GetByID(context.Background(), tenantID, delivery.ID)
 	require.NoError(t, err)
 	assert.Equal(t, domain.DeliveryInTransit, updated.Status)
+}
+
+func TestMCP_ToolsCall_ListDrivers_ReturnsOnlyOwnTenantsDrivers(t *testing.T) {
+	app := newMCPTestApp(t)
+
+	tenantA := uuid.New()
+	tenantB := uuid.New()
+	require.NoError(t, app.tenantRepo.FindOrCreate(context.Background(), tenantA))
+	require.NoError(t, app.tenantRepo.FindOrCreate(context.Background(), tenantB))
+
+	require.NoError(t, app.userRepo.Create(context.Background(), &domain.User{
+		TenantID: tenantA, Email: "driver.a@fleet.test", Name: "Driver A", Role: domain.RoleDriver,
+	}))
+	require.NoError(t, app.userRepo.Create(context.Background(), &domain.User{
+		TenantID: tenantA, Email: "manager.a@fleet.test", Name: "Manager A", Role: domain.RoleManager,
+	}))
+	require.NoError(t, app.userRepo.Create(context.Background(), &domain.User{
+		TenantID: tenantB, Email: "driver.b@fleet.test", Name: "Driver B", Role: domain.RoleDriver,
+	}))
+
+	token, err := app.jwtIssuer.Issue(uuid.New(), tenantA, domain.RoleManager)
+	require.NoError(t, err)
+
+	params, err := json.Marshal(map[string]any{"name": "list_drivers", "arguments": json.RawMessage(`{}`)})
+	require.NoError(t, err)
+
+	rec := app.post(t, token, mcp.Request{JSONRPC: "2.0", Method: "tools/call", Params: params})
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	var resp mcp.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Nil(t, resp.Error)
+
+	raw, err := json.Marshal(resp.Result)
+	require.NoError(t, err)
+	body := string(raw)
+	assert.Contains(t, body, "Driver A")
+	assert.NotContains(t, body, "Manager A", "list_drivers must not include managers")
+	assert.NotContains(t, body, "Driver B", "list_drivers must not leak another tenant's drivers")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -29,11 +30,18 @@ type deliveryStatusUpdater interface {
 	UpdateStatus(ctx context.Context, tenantID, id uuid.UUID, status domain.DeliveryStatus) (*domain.Delivery, error)
 }
 
-// RegisterFleetTools wires this project's three tools into server. Each
-// is a thin wrapper around an already-tested service method — no new
-// business logic lives here, only argument parsing and honest
-// "not available" framing for data the project doesn't have yet. 
-func RegisterFleetTools(server *Server, vehicles vehicleGetter, deliveries deliveryGetter, statusUpdater deliveryStatusUpdater) {
+type driverLister interface {
+	ListDrivers(ctx context.Context, tenantID uuid.UUID) ([]domain.User, error)
+}
+
+// RegisterFleetTools wires this project's four tools into server (3 read,
+// 1 write — C22's own minimum). Each is a thin wrapper around an
+// already-tested service method — no new business logic lives here, only
+// argument parsing and honest "not available"/"doesn't indicate current
+// availability" framing for data the project doesn't have yet (see the
+// comments on domain.Vehicle.CurrentLat/Lng, the absence of an ETA field
+// on domain.Delivery, and list_drivers below).
+func RegisterFleetTools(server *Server, vehicles vehicleGetter, deliveries deliveryGetter, statusUpdater deliveryStatusUpdater, drivers driverLister) {
 	server.RegisterTool(ToolDefinition{
 		Name:        "get_vehicle_location",
 		Description: "Get the last reported GPS location of a vehicle by its ID. Returns an honest 'not yet reported' message if the vehicle has never sent a position.",
@@ -70,6 +78,15 @@ func RegisterFleetTools(server *Server, vehicles vehicleGetter, deliveries deliv
 			"required": []string{"delivery_id", "status"},
 		},
 	}, updateDeliveryStatusHandler(statusUpdater))
+
+	server.RegisterTool(ToolDefinition{
+		Name:        "list_drivers",
+		Description: "List every driver (not manager) user in the tenant, with their name and email. Does not indicate who is currently free vs. already on a delivery — this project doesn't track that yet.",
+		InputSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+	}, listDriversHandler(drivers))
 }
 
 func getVehicleLocationHandler(vehicles vehicleGetter) ToolHandler {
@@ -119,6 +136,25 @@ func getDeliveryETAHandler(deliveries deliveryGetter) ToolHandler {
 		// on that struct) — an honest stub here, not a fabricated
 		// estimate, until C10 (live GPS tracking) actually exists.
 		return fmt.Sprintf("ETA for delivery %s is not available yet — it requires live GPS tracking, which this project doesn't have. Current status: %s.", d.ID, d.Status), nil
+	}
+}
+
+func listDriversHandler(drivers driverLister) ToolHandler {
+	return func(ctx context.Context, tenantID uuid.UUID, _ json.RawMessage) (string, error) {
+		list, err := drivers.ListDrivers(ctx, tenantID)
+		if err != nil {
+			return "", err
+		}
+		if len(list) == 0 {
+			return "This tenant has no drivers yet.", nil
+		}
+
+		var b strings.Builder
+		b.WriteString("Drivers:\n")
+		for _, u := range list {
+			fmt.Fprintf(&b, "- %s (%s), id=%s\n", u.Name, u.Email, u.ID)
+		}
+		return b.String(), nil
 	}
 }
 
