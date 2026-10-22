@@ -101,3 +101,73 @@ func TestGroqClient_StreamChat_SendsCorrectRequestShape(t *testing.T) {
 	assert.Equal(t, "llama-3.3-70b-versatile", capturedBody["model"])
 	assert.Equal(t, true, capturedBody["stream"])
 }
+
+func TestGroqClient_Chat_NoToolCall_ReturnsContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"3 vehicles are idle."}}]}`)
+	}))
+	defer server.Close()
+
+	client := llm.NewGroqClient("test-key", "test-model")
+	client.BaseURL = server.URL
+
+	resp, err := client.Chat(context.Background(), []llm.Message{{Role: "user", Content: "how many idle?"}}, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "3 vehicles are idle.", resp.Content)
+	assert.Empty(t, resp.ToolCalls)
+}
+
+func TestGroqClient_Chat_ToolCallRequested_ReturnsToolCalls(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_vehicle_location","arguments":"{\"vehicle_id\":\"abc\"}"}}]}}]}`)
+	}))
+	defer server.Close()
+
+	client := llm.NewGroqClient("test-key", "test-model")
+	client.BaseURL = server.URL
+
+	resp, err := client.Chat(context.Background(), []llm.Message{{Role: "user", Content: "where is it?"}},
+		[]llm.Tool{{Type: "function", Function: llm.ToolFunction{Name: "get_vehicle_location"}}})
+
+	require.NoError(t, err)
+	require.Len(t, resp.ToolCalls, 1)
+	assert.Equal(t, "get_vehicle_location", resp.ToolCalls[0].Function.Name)
+	assert.Equal(t, `{"vehicle_id":"abc"}`, resp.ToolCalls[0].Function.Arguments)
+}
+
+func TestGroqClient_Chat_SendsToolsAndNonStreamingFlag(t *testing.T) {
+	var capturedBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&capturedBody))
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"ok"}}]}`)
+	}))
+	defer server.Close()
+
+	client := llm.NewGroqClient("test-key", "test-model")
+	client.BaseURL = server.URL
+
+	tools := []llm.Tool{{Type: "function", Function: llm.ToolFunction{Name: "get_vehicle_location", Parameters: map[string]any{"type": "object"}}}}
+	_, err := client.Chat(context.Background(), []llm.Message{{Role: "user", Content: "hi"}}, tools)
+	require.NoError(t, err)
+
+	assert.Equal(t, false, capturedBody["stream"])
+	capturedTools, ok := capturedBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, capturedTools, 1)
+}
+
+func TestGroqClient_Chat_NonOKStatus_ReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"error":"invalid api key"}`)
+	}))
+	defer server.Close()
+
+	client := llm.NewGroqClient("bad-key", "test-model")
+	client.BaseURL = server.URL
+
+	_, err := client.Chat(context.Background(), []llm.Message{{Role: "user", Content: "hi"}}, nil)
+
+	assert.Error(t, err)
+}

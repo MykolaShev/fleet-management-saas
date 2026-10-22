@@ -35,6 +35,7 @@ type chatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
 	Stream   bool      `json:"stream"`
+	Tools    []Tool    `json:"tools,omitempty"`
 }
 
 // chatStreamChunk matches the OpenAI-compatible SSE chunk shape. Only the
@@ -108,4 +109,55 @@ func (c *GroqClient) StreamChat(ctx context.Context, messages []Message) (<-chan
 	}()
 
 	return out, nil
+}
+
+// chatCompletionResponse matches the OpenAI-compatible non-streaming
+// completion shape. Only the fields Chat actually uses are declared.
+type chatCompletionResponse struct {
+	Choices []struct {
+		Message struct {
+			Content   string     `json:"content"`
+			ToolCalls []ToolCall `json:"tool_calls"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+// Chat performs one non-streaming completion. With tools attached, the
+// model may answer directly (Content set) or request a tool call
+// (ToolCalls set) instead — never both, per the OpenAI-compatible
+// contract this mirrors.
+func (c *GroqClient) Chat(ctx context.Context, messages []Message, tools []Tool) (*ChatResponse, error) {
+	reqBody, err := json.Marshal(chatRequest{Model: c.Model, Messages: messages, Stream: false, Tools: tools})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, bytes.NewReader(reqBody))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call groq: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("groq returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var parsed chatCompletionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, fmt.Errorf("parse chat response: %w", err)
+	}
+	if len(parsed.Choices) == 0 {
+		return nil, fmt.Errorf("groq returned no choices")
+	}
+
+	choice := parsed.Choices[0].Message
+	return &ChatResponse{Content: choice.Content, ToolCalls: choice.ToolCalls}, nil
 }
