@@ -11,6 +11,7 @@ import (
 	"github.com/MykolaShev/fleet-management-saas/internal/auth"
 	"github.com/MykolaShev/fleet-management-saas/internal/config"
 	"github.com/MykolaShev/fleet-management-saas/internal/handler"
+	"github.com/MykolaShev/fleet-management-saas/internal/llm"
 	"github.com/MykolaShev/fleet-management-saas/internal/platform/postgres"
 	"github.com/MykolaShev/fleet-management-saas/internal/repository"
 	"github.com/MykolaShev/fleet-management-saas/internal/service"
@@ -66,6 +67,10 @@ func main() {
 	authService := service.NewAuthService(tenantRepo, userRepo, jwtIssuer)
 	authHandler := handler.NewAuthHandler(oauthConfig, authService, jwtIssuer, tenantRepo)
 
+	groqClient := llm.NewGroqClient(cfg.LLMAPIKey, cfg.LLMModel)
+	agentService := service.NewAgentService(groqClient, vehicleService, deliveryService)
+	agentHandler := handler.NewAgentHandler(agentService)
+
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -89,6 +94,7 @@ func main() {
 	userHandler.RegisterRoutes(protected)
 	deliveryHandler.RegisterRoutes(protected)
 	featureFlagHandler.RegisterRoutes(protected)
+	agentHandler.RegisterRoutes(protected)
 
 	log.Printf("starting server on :%s", cfg.AppPort)
 	if err := router.Run(":" + cfg.AppPort); err != nil {
