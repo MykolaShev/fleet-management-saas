@@ -12,6 +12,7 @@ import (
 	"github.com/MykolaShev/fleet-management-saas/internal/config"
 	"github.com/MykolaShev/fleet-management-saas/internal/handler"
 	"github.com/MykolaShev/fleet-management-saas/internal/llm"
+	"github.com/MykolaShev/fleet-management-saas/internal/mcp"
 	"github.com/MykolaShev/fleet-management-saas/internal/platform/postgres"
 	"github.com/MykolaShev/fleet-management-saas/internal/repository"
 	"github.com/MykolaShev/fleet-management-saas/internal/service"
@@ -67,8 +68,15 @@ func main() {
 	authService := service.NewAuthService(tenantRepo, userRepo, jwtIssuer)
 	authHandler := handler.NewAuthHandler(oauthConfig, authService, jwtIssuer, tenantRepo)
 
+	// C22: minimal MCP server exposing the fleet tools, plus its own
+	// HTTP endpoint (so it's testable/demoable independently of the LLM
+	// agent) and the AI agent, which calls it in-process for tool-calling.
+	mcpServer := mcp.NewServer()
+	mcp.RegisterFleetTools(mcpServer, vehicleService, deliveryService, deliveryService)
+	mcpHandler := handler.NewMCPHandler(mcpServer)
+
 	groqClient := llm.NewGroqClient(cfg.LLMAPIKey, cfg.LLMModel)
-	agentService := service.NewAgentService(groqClient, vehicleService, deliveryService)
+	agentService := service.NewAgentService(groqClient, vehicleService, deliveryService, mcpServer)
 	agentHandler := handler.NewAgentHandler(agentService)
 
 	router := gin.Default()
@@ -95,6 +103,7 @@ func main() {
 	deliveryHandler.RegisterRoutes(protected)
 	featureFlagHandler.RegisterRoutes(protected)
 	agentHandler.RegisterRoutes(protected)
+	mcpHandler.RegisterRoutes(protected)
 
 	log.Printf("starting server on :%s", cfg.AppPort)
 	if err := router.Run(":" + cfg.AppPort); err != nil {
