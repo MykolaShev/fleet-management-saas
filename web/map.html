@@ -1,0 +1,113 @@
+<!doctype html>
+<!--
+  C8 demo page — not F5 (the real SPA, Week 6). Just enough to visually
+  prove C10's WebSocket feed drives a real, moving, filterable map:
+  Leaflet + OpenStreetMap tiles (no API key/signup needed).
+
+  Usage: http://localhost:8080/map?token=<a dev-token from
+  POST /auth/dev-token>. The token is used both for the initial REST
+  fetch and the WS connection (WS can't send a custom Authorization
+  header from the browser, so it goes via ?token= — same fallback
+  Authenticate already supports for the C21 SSE endpoint).
+-->
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<title>Fleet — live map (C8/C10 demo)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  html, body { height: 100%; margin: 0; font-family: sans-serif; }
+  #map { height: 100%; }
+  #panel {
+    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    background: white; padding: 10px 14px; border-radius: 8px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.3); font-size: 14px;
+  }
+  #panel select { margin-left: 6px; }
+  #status { color: #555; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  Status filter:
+  <select id="filter">
+    <option value="all">all</option>
+    <option value="idle">idle</option>
+    <option value="en_route">en_route</option>
+    <option value="maintenance">maintenance</option>
+  </select>
+  <div id="status">connecting…</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const token = new URLSearchParams(location.search).get('token');
+if (!token) {
+  document.getElementById('status').textContent = 'Missing ?token= — mint one via POST /auth/dev-token';
+  throw new Error('no token');
+}
+
+const map = L.map('map').setView([50.4501, 30.5234], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+}).addTo(map);
+
+// vehicleID -> { marker, status }
+const vehicles = {};
+let currentFilter = 'all';
+
+function applyFilter() {
+  for (const id in vehicles) {
+    const v = vehicles[id];
+    const visible = currentFilter === 'all' || v.status === currentFilter;
+    const el = v.marker.getElement();
+    if (el) el.style.display = visible ? '' : 'none';
+  }
+}
+
+function upsertVehicle(id, lat, lng, status, label) {
+  if (vehicles[id]) {
+    vehicles[id].marker.setLatLng([lat, lng]);
+    vehicles[id].status = status;
+  } else {
+    const marker = L.marker([lat, lng]).addTo(map).bindPopup(label || id);
+    vehicles[id] = { marker, status };
+  }
+  applyFilter();
+}
+
+document.getElementById('filter').addEventListener('change', (e) => {
+  currentFilter = e.target.value;
+  applyFilter();
+});
+
+// Initial snapshot — everyone who already has a position, placed at once
+// (not one point: this is the "many points" requirement, not a single
+// pin).
+fetch('/api/v1/vehicles?page_size=200', { headers: { Authorization: 'Bearer ' + token } })
+  .then(r => r.json())
+  .then(data => {
+    for (const v of (data.items || [])) {
+      if (v.current_lat != null && v.current_lng != null) {
+        upsertVehicle(v.id, v.current_lat, v.current_lng, v.status, v.plate_number + ' (' + v.status + ')');
+      }
+    }
+    document.getElementById('status').textContent = vehicles && Object.keys(vehicles).length
+      ? Object.keys(vehicles).length + ' vehicle(s) loaded — connecting live feed…'
+      : 'No vehicles with a known position yet — waiting for the simulator…';
+  });
+
+// Live feed — C10's WebSocket mechanism; every tick the simulator
+// publishes, a marker moves in real time, no page reload.
+const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+const ws = new WebSocket(wsProto + '://' + location.host + '/api/v1/vehicles/ws?token=' + token);
+ws.onopen = () => { document.getElementById('status').textContent = 'live (WebSocket connected)'; };
+ws.onclose = () => { document.getElementById('status').textContent = 'disconnected'; };
+ws.onmessage = (ev) => {
+  const pos = JSON.parse(ev.data);
+  upsertVehicle(pos.vehicle_id, pos.lat, pos.lng, pos.status);
+};
+</script>
+</body>
+</html>

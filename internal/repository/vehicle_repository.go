@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -88,6 +89,38 @@ func (r *VehicleRepository) Update(ctx context.Context, tenantID uuid.UUID, v *d
 		return ErrNotFound
 	}
 	return nil
+}
+
+// UpdateLocation writes only lat/lng/timestamp — separate from Update
+// because that method's Select list deliberately excludes these columns
+// (they weren't mutable via the regular API until C10). Used by the C10
+// position simulator.
+func (r *VehicleRepository) UpdateLocation(ctx context.Context, tenantID, id uuid.UUID, lat, lng float64, at time.Time) error {
+	res := r.db.WithContext(ctx).
+		Model(&domain.Vehicle{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Select("current_lat", "current_lng", "last_location_at").
+		Updates(&domain.Vehicle{CurrentLat: &lat, CurrentLng: &lng, LastLocationAt: &at})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ListAllActive returns every non-idle vehicle across ALL tenants — the
+// one deliberate exception to this file's tenant-scoping rule. It exists
+// only for the C10 simulator, a background process with no request
+// context and nothing user-facing to leak into; it must never be called
+// from a handler.
+func (r *VehicleRepository) ListAllActive(ctx context.Context) ([]domain.Vehicle, error) {
+	var vehicles []domain.Vehicle
+	err := r.db.WithContext(ctx).
+		Where("status != ?", domain.VehicleIdle).
+		Find(&vehicles).Error
+	return vehicles, err
 }
 
 func (r *VehicleRepository) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
