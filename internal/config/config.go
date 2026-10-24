@@ -27,6 +27,10 @@ type Config struct {
 
 	// JWTSecret signs our own session tokens (separate from Google's).
 	JWTSecret string
+
+	// LLM (Groq, OpenAI-compatible).
+	LLMAPIKey string
+	LLMModel  string
 }
 
 // Load reads a .env file if present (local dev convenience) and falls back
@@ -52,6 +56,9 @@ func Load() Config {
 		OAuthRedirectURL:  getEnv("OAUTH_REDIRECT_URL", "http://localhost:8080/api/v1/auth/callback"),
 
 		JWTSecret: getEnv("JWT_SECRET", "change-me"),
+
+		LLMAPIKey: getEnv("LLM_API_KEY", ""),
+		LLMModel:  getEnv("LLM_MODEL", "openai/gpt-oss-20b"),
 	}
 }
 

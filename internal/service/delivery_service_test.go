@@ -242,3 +242,62 @@ func TestDeliveryService_Delete_NotFound(t *testing.T) {
 
 	assert.ErrorIs(t, err, repository.ErrNotFound)
 }
+
+// UpdateStatus is the narrow adapter internal/mcp's update_delivery_status
+// tool calls through — these tests live here (not in internal/mcp) since
+// they're really about DeliveryService's own behavior; internal/mcp's own
+// tests use a fake, not this real implementation.
+
+func TestDeliveryService_UpdateStatus_UpdatesOnlyStatus(t *testing.T) {
+	repo := newFakeDeliveryRepo()
+	svc := service.NewDeliveryService(repo, &fakeVehicleLookup{}, &fakeUserLookup{})
+	tenantID := uuid.New()
+
+	d, err := svc.Create(context.Background(), service.CreateDeliveryInput{
+		TenantID:       tenantID,
+		PickupAddress:  "A",
+		DropoffAddress: "B",
+	})
+	require.NoError(t, err)
+
+	updated, err := svc.UpdateStatus(context.Background(), tenantID, d.ID, domain.DeliveryInTransit)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.DeliveryInTransit, updated.Status)
+	assert.Equal(t, "A", updated.PickupAddress, "UpdateStatus must not disturb other fields")
+}
+
+func TestDeliveryService_UpdateStatus_RejectsInvalidStatus(t *testing.T) {
+	repo := newFakeDeliveryRepo()
+	svc := service.NewDeliveryService(repo, &fakeVehicleLookup{}, &fakeUserLookup{})
+	tenantID := uuid.New()
+
+	d, err := svc.Create(context.Background(), service.CreateDeliveryInput{
+		TenantID:       tenantID,
+		PickupAddress:  "A",
+		DropoffAddress: "B",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateStatus(context.Background(), tenantID, d.ID, domain.DeliveryStatus("lost_in_space"))
+
+	assert.ErrorIs(t, err, service.ErrValidation)
+}
+
+func TestDeliveryService_UpdateStatus_CrossTenant_NotFound(t *testing.T) {
+	repo := newFakeDeliveryRepo()
+	svc := service.NewDeliveryService(repo, &fakeVehicleLookup{}, &fakeUserLookup{})
+	ownerTenant := uuid.New()
+	otherTenant := uuid.New()
+
+	d, err := svc.Create(context.Background(), service.CreateDeliveryInput{
+		TenantID:       ownerTenant,
+		PickupAddress:  "A",
+		DropoffAddress: "B",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateStatus(context.Background(), otherTenant, d.ID, domain.DeliveryInTransit)
+
+	assert.ErrorIs(t, err, repository.ErrNotFound)
+}

@@ -125,3 +125,28 @@ func (s *UserService) Update(ctx context.Context, tenantID, id uuid.UUID, in Upd
 func (s *UserService) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
 	return s.repo.Delete(ctx, tenantID, id)
 }
+
+// maxDriversListed caps internal/mcp's list_drivers tool the same way
+// AgentService's own context injection is capped (see maxContextItems) —
+// fine at this project's scale, not meant to replace real pagination.
+const maxDriversListed = 200
+
+// ListDrivers returns every driver-role user for a tenant, in the plain
+// domain-only shape internal/mcp's list_drivers tool depends on — same
+// narrow-adapter pattern as DeliveryService.UpdateStatus (see that
+// method's comment): internal/mcp can only depend on internal/domain,
+// never on this package's own UserListResult pagination wrapper.
+func (s *UserService) ListDrivers(ctx context.Context, tenantID uuid.UUID) ([]domain.User, error) {
+	items, _, err := s.repo.List(ctx, tenantID, 1, maxDriversListed)
+	if err != nil {
+		return nil, err
+	}
+
+	drivers := make([]domain.User, 0, len(items))
+	for _, u := range items {
+		if u.Role == domain.RoleDriver {
+			drivers = append(drivers, u)
+		}
+	}
+	return drivers, nil
+}

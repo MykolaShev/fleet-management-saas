@@ -16,16 +16,29 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/deployments/docker/docker-compose.yml"
+ENV_FILE="$REPO_ROOT/.env"
 BASE_URL="http://localhost:8080"
+
+# IMPORTANT: docker compose's default .env lookup is based on the
+# directory containing the compose file (deployments/docker/), NOT the
+# repo root — so without --env-file pointing at the root .env explicitly,
+# LLM_API_KEY (and anything else from it) silently never reaches the
+# container. If $ENV_FILE doesn't exist yet, fall back to compose's
+# defaults (docker compose tolerates a missing --env-file target by
+# just not substituting those variables, rather than erroring).
+COMPOSE="docker compose -f $COMPOSE_FILE"
+if [ -f "$ENV_FILE" ]; then
+  COMPOSE="$COMPOSE --env-file $ENV_FILE"
+fi
 
 cleanup() {
   echo "==> Tearing down..."
-  docker compose -f "$COMPOSE_FILE" --profile full down -v
+  $COMPOSE --profile full down -v
 }
 trap cleanup EXIT
 
 echo "==> Building and starting the full stack (postgres + redis + api)..."
-docker compose -f "$COMPOSE_FILE" --profile full up -d --build
+$COMPOSE --profile full up -d --build
 
 echo "==> Waiting for /health..."
 attempts=30
@@ -33,7 +46,7 @@ until curl -sf "$BASE_URL/health" >/dev/null 2>&1; do
   attempts=$((attempts - 1))
   if [ "$attempts" -le 0 ]; then
     echo "FAIL: API did not become healthy in time"
-    docker compose -f "$COMPOSE_FILE" --profile full logs api
+    $COMPOSE --profile full logs api
     exit 1
   fi
   sleep 2

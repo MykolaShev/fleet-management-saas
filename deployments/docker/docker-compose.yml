@@ -43,6 +43,8 @@ services:
       DB_SSLMODE: disable
       REDIS_ADDR: "redis:6379"
       JWT_SECRET: "local-dev-only-secret-do-not-use-in-prod"
+      LLM_API_KEY: "${LLM_API_KEY:-}" # pulled from the host's own env/.env, not hardcoded here
+      LLM_MODEL: "llama-3.3-70b-versatile"
     ports:
       - "8080:8080"
     depends_on:

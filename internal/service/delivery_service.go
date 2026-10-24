@@ -233,3 +233,26 @@ func (s *DeliveryService) Update(ctx context.Context, tenantID, id uuid.UUID, in
 func (s *DeliveryService) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
 	return s.repo.Delete(ctx, tenantID, id)
 }
+
+// UpdateStatus sets only a delivery's status, scoped to tenantID. This is
+// the narrow adapter internal/mcp's update_delivery_status tool depends on
+// (internal/mcp can only depend on internal/domain, never on this
+// package's own UpdateDeliveryInput shape — see that package's doc
+// comment) — so this method's signature is deliberately plain domain
+// types only, reusing the same status validation as Update above.
+func (s *DeliveryService) UpdateStatus(ctx context.Context, tenantID, id uuid.UUID, status domain.DeliveryStatus) (*domain.Delivery, error) {
+	if !isValidDeliveryStatus(status) {
+		return nil, fmt.Errorf("%w: invalid status %q", ErrValidation, status)
+	}
+
+	d, err := s.repo.GetByID(ctx, tenantID, id)
+	if err != nil {
+		return nil, err
+	}
+	d.Status = status
+
+	if err := s.repo.Update(ctx, tenantID, d); err != nil {
+		return nil, err
+	}
+	return d, nil
+}

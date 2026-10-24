@@ -17,8 +17,8 @@ const (
 )
 
 // Authenticate validates the session JWT issued by /auth/callback (the
-// real Google login) or, locally, /auth/dev-token, and makes the
-// caller's identity available to handlers via tenantID(c).
+// real Google login) or, locally, /auth/dev-token, and makes the caller's
+// identity available to handlers via tenantID(c).
 //
 // This replaces the earlier EnsureTenant stand-in, which trusted a raw
 // X-Tenant-ID header and had to provision a Tenant row on every request to
@@ -27,9 +27,8 @@ const (
 // because the JWT itself is the proof that provisioning already happened.
 func Authenticate(issuer *auth.JWTIssuer) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		tokenString := strings.TrimPrefix(header, "Bearer ")
-		if tokenString == "" || tokenString == header {
+		tokenString := extractToken(c)
+		if tokenString == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid Authorization header"})
 			return
 		}
@@ -45,6 +44,22 @@ func Authenticate(issuer *auth.JWTIssuer) gin.HandlerFunc {
 		c.Set(roleContextKey, claims.Role)
 		c.Next()
 	}
+}
+
+// extractToken reads the bearer token from the Authorization header, or
+// falls back to a ?token= query parameter. The fallback exists only for
+// Server-Sent Events endpoints (see AgentHandler.Chat): a browser's native
+// EventSource API can't set custom headers, so there's no other way for
+// it to authenticate. A query-param token ends up in more places (server
+// access logs, browser history) than a header does, so this fallback
+// should only ever be relied on where it's genuinely unavoidable — not
+// treated as an equally safe alternative everywhere.
+func extractToken(c *gin.Context) string {
+	header := c.GetHeader("Authorization")
+	if trimmed := strings.TrimPrefix(header, "Bearer "); trimmed != "" && trimmed != header {
+		return trimmed
+	}
+	return c.Query("token")
 }
 
 // tenantID retrieves the tenant id that Authenticate already validated and
