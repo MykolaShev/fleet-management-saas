@@ -31,15 +31,15 @@ Legend: ⬜ not started · 🟨 in progress · ✅ done
 
 | Item | Description                          | Status |
 |------|---------------------------------------|--------|
-| AI logistics agent | Chat agent with SSE streaming, tool-calling decide/act/answer flow, raw-SSE visibility into tool calls (no frontend yet to render it) | 🟨 (code complete locally, pending `go build`/`go test` confirmation and merge of `stage/C21` into `main`) |
-| MCP server | Tools: `get_vehicle_location`, `get_delivery_eta` (honest stub — no live GPS yet), `update_delivery_status` | 🟨 (code complete locally, same branch/merge status as above) |
+| AI logistics agent | Chat agent with SSE streaming, tool-calling decide/act/answer flow, raw-SSE visibility into tool calls (no frontend yet — demoed via Postman, see §0's framing of "to the frontend") | ✅ (`go build`/`go test` green, demoed; merge of `stage/C21` into `main` still pending) |
+| MCP server | 3 read tools + 1 write (C22's own minimum): `get_vehicle_location`, `get_delivery_eta` (honest stub — no live GPS yet), `list_drivers`, `update_delivery_status` | ✅ (same test/merge status as above) |
 
 ## Map + Real-time
 
 | Item | Description                          | Status |
 |------|---------------------------------------|--------|
-| Vehicle map | Map view with filtering (Leaflet/OSM)| ⬜ |
-| WebSockets | Live position tracking                 | ⬜ |
+| Vehicle map | Leaflet/OSM demo page (`/map`, not F5) — live markers, status filter, "many points" not one pin | ✅ |
+| WebSockets (C10) | WS, long poll, adaptive poll all serving the same simulated live positions, `cmd/wsbench` for the comparative analysis | ✅ (position simulator moves only non-`idle` vehicles — PATCH a vehicle's status first when demoing) |
 | GraphQL | GraphQL layer over live-tracking data     | ⬜ |
 
 ## Frontend
