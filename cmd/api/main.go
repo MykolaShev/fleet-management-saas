@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -16,7 +17,12 @@ import (
 	"github.com/MykolaShev/fleet-management-saas/internal/platform/postgres"
 	"github.com/MykolaShev/fleet-management-saas/internal/repository"
 	"github.com/MykolaShev/fleet-management-saas/internal/service"
+	"github.com/MykolaShev/fleet-management-saas/internal/tracking"
 )
+
+// positionSimulatorInterval is how often C10's simulator nudges active
+// vehicles — this project's stand-in for a real GPS feed.
+const positionSimulatorInterval = 2 * time.Second
 
 // sessionTokenTTL is how long a session JWT stays valid after login.
 const sessionTokenTTL = 24 * time.Hour
@@ -79,10 +85,22 @@ func main() {
 	agentService := service.NewAgentService(groqClient, vehicleService, deliveryService, mcpServer)
 	agentHandler := handler.NewAgentHandler(agentService)
 
+	// C10: WS/long-poll/adaptive-poll all serve the same live positions.
+	// The simulator runs for the life of the process — no graceful
+	// shutdown plumbing exists yet (see B7/deploy stages), so
+	// context.Background() is fine here for now.
+	trackingHub := tracking.NewHub()
+	simulator := tracking.NewSimulator(vehicleRepo, trackingHub, positionSimulatorInterval)
+	go simulator.Run(context.Background())
+	trackingHandler := handler.NewTrackingHandler(trackingHub)
+
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+	// C8 demo page — not F5 (the real SPA), just enough to visually prove
+	// the WS feed drives a real map. See web/map.html's own comments.
+	router.StaticFile("/map", "./web/map.html")
 
 	api := router.Group("/api/v1")
 
@@ -104,6 +122,7 @@ func main() {
 	featureFlagHandler.RegisterRoutes(protected)
 	agentHandler.RegisterRoutes(protected)
 	mcpHandler.RegisterRoutes(protected)
+	trackingHandler.RegisterRoutes(protected)
 
 	log.Printf("starting server on :%s", cfg.AppPort)
 	if err := router.Run(":" + cfg.AppPort); err != nil {
