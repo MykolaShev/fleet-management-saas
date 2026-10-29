@@ -42,6 +42,7 @@ services:
       DB_NAME: fleet_management
       DB_SSLMODE: disable
       REDIS_ADDR: "redis:6379"
+      CACHE_BACKEND: "redis" # Redis is already a healthy dependency here; bare `go run` without Docker defaults to memory instead
       JWT_SECRET: "local-dev-only-secret-do-not-use-in-prod"
       LLM_API_KEY: "${LLM_API_KEY:-}" # pulled from the host's own env/.env, not hardcoded here
       LLM_MODEL: "llama-3.3-70b-versatile"
