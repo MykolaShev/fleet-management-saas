@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/MykolaShev/fleet-management-saas/internal/auth"
+	"github.com/MykolaShev/fleet-management-saas/internal/cache"
 	"github.com/MykolaShev/fleet-management-saas/internal/config"
 	"github.com/MykolaShev/fleet-management-saas/internal/handler"
 	"github.com/MykolaShev/fleet-management-saas/internal/llm"
@@ -94,6 +95,26 @@ func main() {
 	go simulator.Run(context.Background())
 	trackingHandler := handler.NewTrackingHandler(trackingHub)
 
+	// B9: pick the cache backend by config, not by what's "nicer" — both
+	// implement cache.Cache identically from the middleware's point of
+	// view. Fails fast on a configured-but-unreachable Redis rather than
+	// silently degrading, same as the DB connection above.
+	var httpCache cache.Cache
+	switch cfg.CacheBackend {
+	case "redis":
+		redisCache := cache.NewRedis(cfg.RedisAddr, cfg.RedisPassword)
+		pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := redisCache.Ping(pingCtx); err != nil {
+			log.Fatalf("CACHE_BACKEND=redis but Redis at %s is unreachable: %v", cfg.RedisAddr, err)
+		}
+		httpCache = redisCache
+		log.Printf("cache backend: redis (%s)", cfg.RedisAddr)
+	default:
+		httpCache = cache.NewMemory()
+		log.Println("cache backend: memory")
+	}
+
 	router := gin.Default()
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -116,10 +137,18 @@ func main() {
 	}
 
 	protected := api.Group("", handler.Authenticate(jwtIssuer))
-	vehicleHandler.RegisterRoutes(protected)
-	userHandler.RegisterRoutes(protected)
-	deliveryHandler.RegisterRoutes(protected)
-	featureFlagHandler.RegisterRoutes(protected)
+
+	// B9's cache sits only on plain CRUD routes — never on agentHandler
+	// (GET /agent/chat is SSE; caching a chat reply by its question text
+	// would return a stale answer to a repeated question, not a fresh
+	// LLM call) or trackingHandler (GET /vehicles/ws is a long-lived
+	// WebSocket upgrade, not a request with a cacheable body).
+	cached := protected.Group("", handler.CacheMiddleware(httpCache, cfg.CacheTTL))
+	vehicleHandler.RegisterRoutes(cached)
+	userHandler.RegisterRoutes(cached)
+	deliveryHandler.RegisterRoutes(cached)
+	featureFlagHandler.RegisterRoutes(cached)
+
 	agentHandler.RegisterRoutes(protected)
 	mcpHandler.RegisterRoutes(protected)
 	trackingHandler.RegisterRoutes(protected)

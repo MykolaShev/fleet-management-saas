@@ -3,6 +3,8 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -31,6 +33,14 @@ type Config struct {
 	// LLM (Groq, OpenAI-compatible).
 	LLMAPIKey string
 	LLMModel  string
+
+	// B9 cache. CacheBackend is "memory" (default, no extra
+	// infrastructure) or "redis" (needs REDIS_ADDR reachable — see
+	// docker-compose, which already runs Redis for this).
+	CacheBackend  string
+	CacheTTL      time.Duration
+	RedisAddr     string
+	RedisPassword string
 }
 
 // Load reads a .env file if present (local dev convenience) and falls back
@@ -59,6 +69,11 @@ func Load() Config {
 
 		LLMAPIKey: getEnv("LLM_API_KEY", ""),
 		LLMModel:  getEnv("LLM_MODEL", "openai/gpt-oss-20b"),
+
+		CacheBackend:  getEnv("CACHE_BACKEND", "memory"),
+		CacheTTL:      time.Duration(getEnvInt("CACHE_TTL_SECONDS", 15)) * time.Second,
+		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 	}
 }
 
@@ -67,4 +82,17 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		log.Printf("config: invalid %s=%q, using default of %d", key, v, fallback)
+		return fallback
+	}
+	return n
 }
