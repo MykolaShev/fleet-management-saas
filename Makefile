@@ -1,4 +1,4 @@
-.PHONY: run build test lint up up-full down tidy smoke-test postman-test
+.PHONY: run build test lint up up-full down tidy smoke-test postman-test clean-testcache
 
 run:
 	go run ./cmd/api
@@ -34,3 +34,6 @@ smoke-test:
 postman-test:
 	npx --yes newman run test/postman/fleet-management.postman_collection.json \
 		-e test/postman/fleet-management-local.postman_environment.json
+
+clean-testcache:
+	go clean -testcache
