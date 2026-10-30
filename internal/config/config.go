@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -41,6 +42,8 @@ type Config struct {
 	CacheTTL      time.Duration
 	RedisAddr     string
 	RedisPassword string
+
+	CORSAllowedOrigins []string
 }
 
 // Load reads a .env file if present (local dev convenience) and falls back
@@ -74,6 +77,8 @@ func Load() Config {
 		CacheTTL:      time.Duration(getEnvInt("CACHE_TTL_SECONDS", 15)) * time.Second,
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+
+		CORSAllowedOrigins: strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173"), ","),
 	}
 }
 
