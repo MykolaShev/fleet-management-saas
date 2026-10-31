@@ -116,6 +116,7 @@ func main() {
 	}
 
 	router := gin.Default()
+	router.Use(handler.CORS(cfg.CORSAllowedOrigins))
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
