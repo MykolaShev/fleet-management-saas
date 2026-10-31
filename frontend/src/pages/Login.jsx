@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { useAuth } from '../auth';
 
 // Dev-token sign-in, same shortcut used for the Postman demos — mints a
 // real session JWT against a fresh (or named) tenant without a real
@@ -9,9 +10,10 @@ import { api } from '../api';
 export default function Login() {
   const [role, setRole] = useState('manager');
   const [error, setError] = useState(null);
+  const { signIn } = useAuth();
   const navigate = useNavigate();
 
-  async function signIn(e) {
+  async function submit(e) {
     e.preventDefault();
     setError(null);
     try {
@@ -19,8 +21,7 @@ export default function Login() {
         method: 'POST',
         body: JSON.stringify({ role }),
       });
-      localStorage.setItem('token', body.token);
-      localStorage.setItem('tenant_id', body.tenant_id);
+      signIn(body.token, body.tenant_id);
       navigate('/vehicles');
     } catch (err) {
       setError(err.message);
@@ -28,10 +29,11 @@ export default function Login() {
   }
 
   return (
-    <div className="centered">
-      <form onSubmit={signIn} className="card">
-        <h1>Fleet Management</h1>
-        <p className="muted">Dev sign-in — mints a session for a fresh tenant.</p>
+    <div className="login-screen">
+      <form onSubmit={submit} className="login-card">
+        <p className="login-mark">FLEET</p>
+        <h1>Dispatch console</h1>
+        <p className="muted">Dev sign-in mints a session for a fresh tenant — no Google login needed here.</p>
         <label>
           Role
           <select value={role} onChange={(e) => setRole(e.target.value)}>

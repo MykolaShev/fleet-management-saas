@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import StatusBadge from '../StatusBadge';
 
 export default function Vehicles() {
   const [vehicles, setVehicles] = useState(null);
@@ -12,11 +13,22 @@ export default function Vehicles() {
   }, []);
 
   if (error) return <p className="error">{error}</p>;
-  if (!vehicles) return <p>Loading…</p>;
+  if (!vehicles) return <p className="muted">Loading…</p>;
+
+  if (vehicles.length === 0) {
+    return (
+      <div>
+        <h1>Vehicles</h1>
+        <p className="empty-state">
+          No vehicles yet. Create one with <code>POST /vehicles</code> — it'll show up here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h2>Vehicles ({vehicles.length})</h2>
+      <h1>Vehicles <span className="count">{vehicles.length}</span></h1>
       <table>
         <thead>
           <tr>
@@ -29,10 +41,10 @@ export default function Vehicles() {
         <tbody>
           {vehicles.map((v) => (
             <tr key={v.id}>
-              <td>{v.plate_number}</td>
+              <td className="mono">{v.plate_number}</td>
               <td>{v.model}</td>
-              <td>{v.status}</td>
-              <td>
+              <td><StatusBadge status={v.status} /></td>
+              <td className="mono muted">
                 {v.current_lat != null
                   ? `${v.current_lat.toFixed(4)}, ${v.current_lng.toFixed(4)}`
                   : '—'}

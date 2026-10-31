@@ -2,43 +2,54 @@ import { Navigate, NavLink, Route, Routes } from 'react-router-dom';
 import Login from './pages/Login';
 import Vehicles from './pages/Vehicles';
 import Deliveries from './pages/Deliveries';
+import { useAuth } from './auth';
 
 function RequireAuth({ children }) {
-  return localStorage.getItem('token') ? children : <Navigate to="/login" replace />;
+  const { signedIn } = useAuth();
+  return signedIn ? children : <Navigate to="/login" replace />;
 }
 
 // /map (web/map.html, the C8/C10 demo page) is served by the Go backend
 // itself, not this SPA — different origin, different port. Linking out
-// to it with the current token saved a second dev-token mint.
-function mapURL() {
+// with the current token saves a second dev-token mint.
+function mapURL(token) {
   const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
   const backendOrigin = apiBase.replace(/\/api\/v1\/?$/, '');
-  const token = localStorage.getItem('token') || '';
-  return `${backendOrigin}/map?token=${encodeURIComponent(token)}`;
+  return `${backendOrigin}/map?token=${encodeURIComponent(token || '')}`;
+}
+
+function AccountInfo() {
+  const { tenantId, token, signOut } = useAuth();
+  return (
+    <span className="account-info">
+      tenant <code>{(tenantId || '').slice(0, 8)}…</code>
+      <button className="link-button" onClick={() => navigator.clipboard.writeText(token || '')}>
+        copy token
+      </button>
+      <button className="link-button" onClick={signOut}>
+        sign out
+      </button>
+    </span>
+  );
 }
 
 export default function App() {
-  const signedIn = !!localStorage.getItem('token');
+  const { signedIn, token } = useAuth();
 
   return (
     <div>
       {signedIn && (
-        <nav>
-          <NavLink to="/vehicles">Vehicles</NavLink>
-          <NavLink to="/deliveries">Deliveries</NavLink>
-          <a href={mapURL()} target="_blank" rel="noreferrer">
-            Live map
-          </a>
-          <button
-            className="link-button"
-            onClick={() => {
-              localStorage.removeItem('token');
-              window.location.href = '/login';
-            }}
-          >
-            Sign out
-          </button>
-        </nav>
+        <header className="dispatch-bar">
+          <span className="brand">FLEET</span>
+          <nav>
+            <NavLink to="/vehicles">Vehicles</NavLink>
+            <NavLink to="/deliveries">Deliveries</NavLink>
+            <a href={mapURL(token)} target="_blank" rel="noreferrer">
+              Live map ↗
+            </a>
+          </nav>
+          <AccountInfo />
+        </header>
       )}
 
       <main>

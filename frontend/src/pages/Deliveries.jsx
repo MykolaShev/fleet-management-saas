@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import StatusBadge from '../StatusBadge';
 
 export default function Deliveries() {
   const [deliveries, setDeliveries] = useState(null);
@@ -12,11 +13,22 @@ export default function Deliveries() {
   }, []);
 
   if (error) return <p className="error">{error}</p>;
-  if (!deliveries) return <p>Loading…</p>;
+  if (!deliveries) return <p className="muted">Loading…</p>;
+
+  if (deliveries.length === 0) {
+    return (
+      <div>
+        <h1>Deliveries</h1>
+        <p className="empty-state">
+          No deliveries yet. Create one with <code>POST /deliveries</code> — it'll show up here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h2>Deliveries ({deliveries.length})</h2>
+      <h1>Deliveries <span className="count">{deliveries.length}</span></h1>
       <table>
         <thead>
           <tr>
@@ -30,7 +42,7 @@ export default function Deliveries() {
             <tr key={d.id}>
               <td>{d.pickup_address}</td>
               <td>{d.dropoff_address}</td>
-              <td>{d.status}</td>
+              <td><StatusBadge status={d.status} /></td>
             </tr>
           ))}
         </tbody>
