@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/MykolaShev/fleet-management-saas/internal/auth"
 	"github.com/MykolaShev/fleet-management-saas/internal/cache"
@@ -16,6 +17,7 @@ import (
 	"github.com/MykolaShev/fleet-management-saas/internal/llm"
 	"github.com/MykolaShev/fleet-management-saas/internal/mcp"
 	"github.com/MykolaShev/fleet-management-saas/internal/platform/postgres"
+	"github.com/MykolaShev/fleet-management-saas/internal/queue"
 	"github.com/MykolaShev/fleet-management-saas/internal/repository"
 	"github.com/MykolaShev/fleet-management-saas/internal/service"
 	"github.com/MykolaShev/fleet-management-saas/internal/tracking"
@@ -60,6 +62,27 @@ func main() {
 
 	deliveryRepo := repository.NewDeliveryRepository(db)
 	deliveryService := service.NewDeliveryService(deliveryRepo, vehicleRepo, userRepo)
+
+	// B8 (queue) + B2 (Telegram): opt-in — only connect to RabbitMQ if a
+	// bot token is actually configured, so working on anything else
+	// doesn't require that infrastructure running too. Without this,
+	// delivery status changes just publish nowhere (noopNotifier).
+	if cfg.TelegramBotToken != "" {
+		rabbitConn, err := amqp.Dial(cfg.RabbitMQURL)
+		if err != nil {
+			log.Fatalf("TELEGRAM_BOT_TOKEN is set but RabbitMQ at %s is unreachable: %v", cfg.RabbitMQURL, err)
+		}
+		defer rabbitConn.Close()
+
+		publisher, err := queue.NewRabbitMQPublisher(rabbitConn)
+		if err != nil {
+			log.Fatalf("set up RabbitMQ publisher: %v", err)
+		}
+		deliveryService.SetNotifier(publisher)
+		log.Println("delivery status-change notifications: enabled (RabbitMQ -> cmd/worker -> Telegram)")
+	} else {
+		log.Println("delivery status-change notifications: disabled (TELEGRAM_BOT_TOKEN not set)")
+	}
 	deliveryHandler := handler.NewDeliveryHandler(deliveryService)
 
 	featureFlagRepo := repository.NewFeatureFlagRepository(db)

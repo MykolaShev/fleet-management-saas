@@ -3,6 +3,9 @@
 run:
 	go run ./cmd/api
 
+worker-run:
+	go run ./cmd/worker
+
 build:
 	go build -o bin/api ./cmd/api
 

@@ -44,6 +44,12 @@ type Config struct {
 	RedisPassword string
 
 	CORSAllowedOrigins []string
+
+	// cmd/api publishes, cmd/worker
+	// consumes and sends the Telegram message.
+	RabbitMQURL      string
+	TelegramBotToken string
+	TelegramChatID   string
 }
 
 // Load reads a .env file if present (local dev convenience) and falls back
@@ -79,6 +85,10 @@ func Load() Config {
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 
 		CORSAllowedOrigins: strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173"), ","),
+
+		RabbitMQURL:      getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
+		TelegramChatID:   getEnv("TELEGRAM_CHAT_ID", ""),
 	}
 }
 

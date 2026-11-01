@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/google/uuid"
 
 	"github.com/MykolaShev/fleet-management-saas/internal/domain"
+	"github.com/MykolaShev/fleet-management-saas/internal/queue"
 	"github.com/MykolaShev/fleet-management-saas/internal/repository"
 )
 
@@ -32,14 +34,39 @@ type userLookup interface {
 	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.User, error)
 }
 
+type noopNotifier struct{}
+
+func (noopNotifier) Publish(context.Context, queue.Job) error { return nil }
+
 type DeliveryService struct {
 	repo     deliveryRepository
 	vehicles vehicleLookup
 	users    userLookup
+	notifier queue.Publisher
 }
 
 func NewDeliveryService(repo deliveryRepository, vehicles vehicleLookup, users userLookup) *DeliveryService {
-	return &DeliveryService{repo: repo, vehicles: vehicles, users: users}
+	return &DeliveryService{repo: repo, vehicles: vehicles, users: users, notifier: noopNotifier{}}
+}
+
+// SetNotifier wires B8's async notification publisher. Optional and set
+// after construction, not a constructor argument — every existing
+// construction site (main.go, every test file) keeps working unchanged;
+// a DeliveryService nobody calls this on just never publishes.
+func (s *DeliveryService) SetNotifier(p queue.Publisher) {
+	s.notifier = p
+}
+
+// publishStatusChange is a best-effort notification: a failed publish is
+// logged, never returned as an error from Update/UpdateStatus — a broker
+// hiccup must not make an otherwise-successful status change fail.
+func (s *DeliveryService) publishStatusChange(ctx context.Context, deliveryID uuid.UUID, oldStatus, newStatus domain.DeliveryStatus) {
+	if oldStatus == newStatus {
+		return
+	}
+	if err := s.notifier.Publish(ctx, queue.Job{DeliveryID: deliveryID, OldStatus: oldStatus, NewStatus: newStatus}); err != nil {
+		log.Printf("delivery service: publish status-change notification: %v", err)
+	}
 }
 
 func isValidDeliveryStatus(s domain.DeliveryStatus) bool {
@@ -184,6 +211,7 @@ func (s *DeliveryService) Update(ctx context.Context, tenantID, id uuid.UUID, in
 	if err != nil {
 		return nil, err
 	}
+	previousStatus := d.Status
 
 	switch {
 	case in.UnassignVehicle:
@@ -227,6 +255,7 @@ func (s *DeliveryService) Update(ctx context.Context, tenantID, id uuid.UUID, in
 	if err := s.repo.Update(ctx, tenantID, d); err != nil {
 		return nil, err
 	}
+	s.publishStatusChange(ctx, d.ID, previousStatus, d.Status)
 	return d, nil
 }
 
@@ -249,10 +278,12 @@ func (s *DeliveryService) UpdateStatus(ctx context.Context, tenantID, id uuid.UU
 	if err != nil {
 		return nil, err
 	}
+	previousStatus := d.Status
 	d.Status = status
 
 	if err := s.repo.Update(ctx, tenantID, d); err != nil {
 		return nil, err
 	}
+	s.publishStatusChange(ctx, d.ID, previousStatus, d.Status)
 	return d, nil
 }

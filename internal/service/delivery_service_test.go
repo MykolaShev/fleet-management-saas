@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/MykolaShev/fleet-management-saas/internal/domain"
+	"github.com/MykolaShev/fleet-management-saas/internal/queue"
 	"github.com/MykolaShev/fleet-management-saas/internal/repository"
 	"github.com/MykolaShev/fleet-management-saas/internal/service"
 )
@@ -300,4 +301,83 @@ func TestDeliveryService_UpdateStatus_CrossTenant_NotFound(t *testing.T) {
 	_, err = svc.UpdateStatus(context.Background(), otherTenant, d.ID, domain.DeliveryInTransit)
 
 	assert.ErrorIs(t, err, repository.ErrNotFound)
+}
+
+// B8/B2: SetNotifier wiring. fakeNotifier stands in for the RabbitMQ
+// publisher — these tests prove the trigger logic (when/what gets
+// published), not the broker itself (see internal/queue's own doc
+// comment for why that part isn't go-test-covered).
+
+type fakeNotifier struct {
+	jobs []queue.Job
+}
+
+func (f *fakeNotifier) Publish(_ context.Context, job queue.Job) error {
+	f.jobs = append(f.jobs, job)
+	return nil
+}
+
+func TestDeliveryService_UpdateStatus_PublishesStatusChange(t *testing.T) {
+	repo := newFakeDeliveryRepo()
+	svc := service.NewDeliveryService(repo, &fakeVehicleLookup{}, &fakeUserLookup{})
+	notifier := &fakeNotifier{}
+	svc.SetNotifier(notifier)
+	tenantID := uuid.New()
+
+	d, err := svc.Create(context.Background(), service.CreateDeliveryInput{
+		TenantID:       tenantID,
+		PickupAddress:  "A",
+		DropoffAddress: "B",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateStatus(context.Background(), tenantID, d.ID, domain.DeliveryInTransit)
+	require.NoError(t, err)
+
+	require.Len(t, notifier.jobs, 1)
+	assert.Equal(t, d.ID, notifier.jobs[0].DeliveryID)
+	assert.Equal(t, domain.DeliveryPending, notifier.jobs[0].OldStatus)
+	assert.Equal(t, domain.DeliveryInTransit, notifier.jobs[0].NewStatus)
+}
+
+func TestDeliveryService_Update_SameStatus_DoesNotPublish(t *testing.T) {
+	repo := newFakeDeliveryRepo()
+	svc := service.NewDeliveryService(repo, &fakeVehicleLookup{}, &fakeUserLookup{})
+	notifier := &fakeNotifier{}
+	svc.SetNotifier(notifier)
+	tenantID := uuid.New()
+
+	d, err := svc.Create(context.Background(), service.CreateDeliveryInput{
+		TenantID:       tenantID,
+		PickupAddress:  "A",
+		DropoffAddress: "B",
+	})
+	require.NoError(t, err)
+
+	sameStatus := d.Status
+	newAddress := "C"
+	_, err = svc.Update(context.Background(), tenantID, d.ID, service.UpdateDeliveryInput{
+		Status:        &sameStatus,
+		PickupAddress: &newAddress,
+	})
+	require.NoError(t, err)
+
+	assert.Empty(t, notifier.jobs, "updating unrelated fields without an actual status change must not publish")
+}
+
+func TestDeliveryService_NoNotifierSet_UpdateStatusStillSucceeds(t *testing.T) {
+	repo := newFakeDeliveryRepo()
+	svc := service.NewDeliveryService(repo, &fakeVehicleLookup{}, &fakeUserLookup{})
+	tenantID := uuid.New()
+
+	d, err := svc.Create(context.Background(), service.CreateDeliveryInput{
+		TenantID:       tenantID,
+		PickupAddress:  "A",
+		DropoffAddress: "B",
+	})
+	require.NoError(t, err)
+
+	// No SetNotifier call — must default to a no-op, not panic on nil.
+	_, err = svc.UpdateStatus(context.Background(), tenantID, d.ID, domain.DeliveryInTransit)
+	assert.NoError(t, err)
 }
