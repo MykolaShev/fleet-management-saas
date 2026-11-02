@@ -43,9 +43,11 @@ type Config struct {
 	RedisAddr     string
 	RedisPassword string
 
+	// CORSAllowedOrigins — explicit allow-list for F5's SPA (see
+	// internal/handler/cors.go for why not "*").
 	CORSAllowedOrigins []string
 
-	// cmd/api publishes, cmd/worker
+	// B8 (queue) + B2 (Telegram) — cmd/api publishes, cmd/worker
 	// consumes and sends the Telegram message.
 	RabbitMQURL      string
 	TelegramBotToken string
@@ -86,7 +88,7 @@ func Load() Config {
 
 		CORSAllowedOrigins: strings.Split(getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173"), ","),
 
-		RabbitMQURL:      getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		RabbitMQURL:      getEnv("RABBITMQ_URL", "amqp://fleet:fleet-dev-only@localhost:5672/"),
 		TelegramBotToken: getEnv("TELEGRAM_BOT_TOKEN", ""),
 		TelegramChatID:   getEnv("TELEGRAM_CHAT_ID", ""),
 	}
