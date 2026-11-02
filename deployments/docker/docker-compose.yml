@@ -30,6 +30,14 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
+    environment:
+      # Not "guest" on purpose: RabbitMQ only lets the literal user
+      # "guest" connect via localhost by default, and a Docker
+      # port-mapped connection from the host doesn't count as localhost
+      # from RabbitMQ's point of view — "guest" gets its connection
+      # dropped mid-handshake. A custom user has no such restriction.
+      RABBITMQ_DEFAULT_USER: fleet
+      RABBITMQ_DEFAULT_PASS: fleet-dev-only
     ports:
       - "5672:5672"   # AMQP — cmd/api and cmd/worker both connect here
       - "15672:15672" # management UI: http://localhost:15672 (guest/guest) — good for the B8 demo
@@ -58,7 +66,7 @@ services:
       JWT_SECRET: "local-dev-only-secret-do-not-use-in-prod"
       LLM_API_KEY: "${LLM_API_KEY:-}" # pulled from the host's own env/.env, not hardcoded here
       LLM_MODEL: "llama-3.3-70b-versatile"
-      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      RABBITMQ_URL: "amqp://fleet:fleet-dev-only@rabbitmq:5672/"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}" # empty -> notifications disabled, see cmd/api/main.go
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     ports:
@@ -77,7 +85,7 @@ services:
       context: ../../
       dockerfile: deployments/docker/Dockerfile.worker
     environment:
-      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      RABBITMQ_URL: "amqp://fleet:fleet-dev-only@rabbitmq:5672/"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
     depends_on:
